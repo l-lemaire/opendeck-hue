@@ -39,12 +39,13 @@ const hueServiceName = "_hue._tcp.local."
 // left out: Hue bridges advertise on IPv4 and one socket keeps things simple.
 var mdnsGroup = &net.UDPAddr{IP: net.IPv4(224, 0, 0, 251), Port: 5353}
 
-// The two variables below exist so tests can substitute a plain socket and a
-// fake responder on localhost without multicast. Production code never
-// changes them.
+// The variables below exist so tests can substitute a plain socket, a fake
+// responder on localhost and a faster retry. Production code never changes
+// them.
 var (
-	mdnsDestination = mdnsGroup
-	mdnsListen      = listenMulticast
+	mdnsDestination   = mdnsGroup
+	mdnsListen        = listenMulticast
+	mdnsRetryInterval = time.Second
 )
 
 // listenMulticast opens the shared mDNS socket. `ifi` nil means "let the
@@ -58,7 +59,12 @@ func listenMulticast(ifi *net.Interface) (*net.UDPConn, error) {
 }
 
 // DefaultMDNSTimeout is how long MDNS waits for answers when the caller does
-// not set Discovery.MDNSTimeout. Bridges answer within a few hundred ms.
+// not set Discovery.MDNSTimeout. A bridge answers within about 100 ms, but
+// RFC 6762 section 6 forbids a responder from multicasting the same record
+// twice within one second. If something on the LAN (or a previous run of
+// this tool) triggered an answer less than a second ago, the bridge stays
+// silent. We therefore re-send the question every mdnsRetryInterval, and two
+// seconds guarantees at least one question lands outside that quiet period.
 const DefaultMDNSTimeout = 2 * time.Second
 
 // MDNS looks for bridges on the local network and returns every distinct
@@ -92,25 +98,30 @@ func (d Discovery) MDNS(ctx context.Context) ([]Bridge, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err := conn.WriteToUDP(query, mdnsDestination); err != nil {
-		return nil, fmt.Errorf("mdns: send query: %w", err)
+	// sendQuery is a closure: a function literal that captures conn, query
+	// and d from the enclosing scope. It is called once now and again on
+	// every retry.
+	sendQuery := func() error {
+		if _, err := conn.WriteToUDP(query, mdnsDestination); err != nil {
+			return fmt.Errorf("mdns: send query: %w", err)
+		}
+		debugf(d.Log, "mdns: sent %d-byte PTR query for %s to %s from %s (interface: %s)",
+			len(query), hueServiceName, mdnsDestination, conn.LocalAddr(), interfaceName(ifi))
+		return nil
 	}
-	debugf(d.Log, "mdns: sent %d-byte PTR query for %s to %s from %s (interface: %s)",
-		len(query), hueServiceName, mdnsDestination, conn.LocalAddr(), interfaceName(ifi))
+	if err := sendQuery(); err != nil {
+		return nil, err
+	}
 
 	// Stop reading at the timeout, or earlier if the context's own deadline
-	// is sooner or it gets cancelled. A read deadline makes the blocking
-	// ReadFromUDP below return with a timeout error.
+	// is sooner or it gets cancelled.
 	deadline := time.Now().Add(timeout)
 	if ctxDeadline, ok := ctx.Deadline(); ok && ctxDeadline.Before(deadline) {
 		deadline = ctxDeadline
 	}
-	if err := conn.SetReadDeadline(deadline); err != nil {
-		return nil, err
-	}
 	// context.AfterFunc runs the function when ctx is cancelled. Moving the
-	// deadline to "now" unblocks the pending read. The returned stop function
-	// deregisters it; deferring stop avoids a leak on the normal path.
+	// read deadline to "now" unblocks a pending ReadFromUDP. The returned stop
+	// function deregisters it; deferring stop avoids a leak on the normal path.
 	stop := context.AfterFunc(ctx, func() { conn.SetReadDeadline(time.Now()) })
 	defer stop()
 
@@ -118,15 +129,37 @@ func (d Discovery) MDNS(ctx context.Context) ([]Bridge, error) {
 	found := make(map[string]Bridge)
 	buf := make([]byte, 9000) // larger than any sane mDNS packet
 	ignored := 0              // unrelated mDNS packets, counted for the debug summary
+	nextRetry := time.Now().Add(mdnsRetryInterval)
 
 	for {
+		// Wake up at the next retry point or the final deadline, whichever
+		// comes first. A read deadline makes the blocking ReadFromUDP return
+		// with a timeout error instead of hanging.
+		wake := nextRetry
+		if deadline.Before(wake) {
+			wake = deadline
+		}
+		if ctx.Err() == nil { // do not undo the AfterFunc's "now" deadline
+			if err := conn.SetReadDeadline(wake); err != nil {
+				return nil, err
+			}
+		}
+
 		n, from, err := conn.ReadFromUDP(buf)
 		if err != nil {
-			// The deadline passing is the normal way out of this loop.
-			if errors.Is(err, os.ErrDeadlineExceeded) {
+			if !errors.Is(err, os.ErrDeadlineExceeded) {
+				return nil, err
+			}
+			// A timeout is either the final deadline (we are done) or a
+			// retry point (ask again, see DefaultMDNSTimeout for why).
+			if ctx.Err() != nil || !time.Now().Before(deadline) {
 				break
 			}
-			return nil, err
+			if err := sendQuery(); err != nil {
+				return nil, err
+			}
+			nextRetry = time.Now().Add(mdnsRetryInterval)
+			continue
 		}
 		packet := buf[:n]
 

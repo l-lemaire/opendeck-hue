@@ -33,13 +33,46 @@ func useFakeMDNS(t *testing.T) *net.UDPConn {
 	}
 	t.Cleanup(func() { responder.Close() })
 
-	oldDest, oldListen := mdnsDestination, mdnsListen
+	oldDest, oldListen, oldRetry := mdnsDestination, mdnsListen, mdnsRetryInterval
 	mdnsDestination = responder.LocalAddr().(*net.UDPAddr)
 	mdnsListen = func(*net.Interface) (*net.UDPConn, error) {
 		return net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
 	}
-	t.Cleanup(func() { mdnsDestination, mdnsListen = oldDest, oldListen })
+	mdnsRetryInterval = 100 * time.Millisecond
+	t.Cleanup(func() { mdnsDestination, mdnsListen, mdnsRetryInterval = oldDest, oldListen, oldRetry })
 	return responder
+}
+
+// TestMDNSRetries checks that the question is re-sent: the responder stays
+// silent on the first question and answers only the second.
+func TestMDNSRetries(t *testing.T) {
+	responder := useFakeMDNS(t)
+	queries := make(chan int, 4) // the goroutine reports how many questions it saw
+
+	go func() {
+		buf := make([]byte, 1500)
+		for i := 1; ; i++ {
+			_, from, err := responder.ReadFromUDP(buf)
+			if err != nil {
+				return
+			}
+			queries <- i
+			if i == 2 {
+				responder.WriteToUDP(fakeBridgeAnswer(t), from)
+			}
+		}
+	}()
+
+	bridges, err := Discovery{Log: testLogger(t), MDNSTimeout: 500 * time.Millisecond}.MDNS(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bridges) != 1 {
+		t.Fatalf("got %d bridges, want 1 (was the query re-sent?)", len(bridges))
+	}
+	if n := len(queries); n < 2 {
+		t.Errorf("responder saw %d question(s), want at least 2", n)
+	}
 }
 
 // TestMDNS runs the real query code against a fake responder on localhost.
