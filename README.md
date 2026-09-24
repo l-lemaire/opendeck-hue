@@ -23,10 +23,28 @@ a static binary.
 
 ```
 make build              # -> bin/hue
-make run ARGS="--help"
 make check              # gofmt, go vet, tests
 make cross              # one binary per OS/arch under dist/
+
+bin/hue discover                 # find bridges (mDNS, then cloud fallback)
+bin/hue discover --json
+bin/hue --debug discover         # show every packet and HTTP exchange
 ```
+
+Global flags such as `--debug` go before the command name.
+
+### Debug output
+
+`--debug` prints to stderr: the mDNS query and every record in each answer,
+whether the cloud fallback ran, and a full dump of every HTTP request and
+response. The Hue application key header is redacted in those dumps.
+
+### mDNS and firewalls
+
+The bridge is found by joining the mDNS multicast group on UDP port 5353,
+sharing the port with Avahi and other clients. This is deliberate: Fedora's
+firewalld only lets mDNS traffic in on port 5353, so a reply to a query sent
+from a random port would be dropped.
 
 ## Security notes
 
