@@ -11,11 +11,6 @@ running OpenDeck, no Node.js, no Python.
 
 **OpenDeck plugin** (`com.github.l-lemaire.hue`)
 
-This repository is one of a family of OpenDeck light plugins, one repository
-per vendor; a Nanoleaf one is planned. Vendor-neutral code (the OpenDeck
-protocol client, the credential store) is kept small and copied between them
-rather than shared as a module.
-
 - Three actions: **Toggle light**, **Toggle room**, **Toggle zone**.
 - Pick the target from a dropdown filled from your bridge.
 - Keys show the real state. Switch a light from the Hue app, a wall switch or

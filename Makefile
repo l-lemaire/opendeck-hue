@@ -2,7 +2,7 @@
 #
 # Common targets:
 #   make build      compile ./cmd/hue into ./bin/hue for this machine
-#   make run        build and run the CLI, e.g. make run ARGS="lights list"
+#   make run        build and run the CLI, e.g. make run ARGS="list lights"
 #   make test       run all unit tests
 #   make check      gofmt + go vet + tests (run before committing)
 #   make cross      build hue for every OpenDeck target triple into ./dist/cli/
@@ -48,7 +48,7 @@ TARGETS := \
 build:
 	go build -trimpath -ldflags '$(LDFLAGS)' -o bin/$(BIN) $(PKG)
 
-# Pass arguments with ARGS, e.g.: make run ARGS="--debug lights list"
+# Pass arguments with ARGS, e.g.: make run ARGS="--debug list lights"
 run: build
 	./bin/$(BIN) $(ARGS)
 
