@@ -2,7 +2,10 @@ module github.com/llemaire/streamdeck
 
 go 1.26.8
 
-require github.com/zalando/go-keyring v0.2.8
+require (
+	github.com/coder/websocket v1.8.15
+	github.com/zalando/go-keyring v0.2.8
+)
 
 require (
 	github.com/danieljoos/wincred v1.2.3 // indirect
