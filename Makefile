@@ -1,4 +1,4 @@
-# Makefile for the streamdeck project.
+# Makefile for opendeck-hue.
 #
 # Common targets:
 #   make build      compile ./cmd/hue into ./bin/hue for this machine
