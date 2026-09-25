@@ -23,13 +23,17 @@ import (
 const appName = "hue-cli"
 
 // auth dispatches `hue auth`, `hue auth status` and `hue auth forget`.
+// A first word that is neither a known subcommand nor a flag is an error,
+// never silently treated as "pair".
 func (a *app) auth(args []string) error {
-	if len(args) > 0 {
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		switch args[0] {
 		case "status":
 			return a.authStatus(args[1:])
 		case "forget":
 			return a.authForget(args[1:])
+		default:
+			return fmt.Errorf("auth: unknown subcommand %q (want: status, forget, or flags for pairing)", args[0])
 		}
 	}
 	return a.authPair(args)
@@ -63,7 +67,7 @@ func (a *app) authPair(args []string) error {
 	backend := fs.String("store", secrets.BackendAuto, "where to keep the key: auto, keyring or file")
 	timeout := fs.Duration("timeout", 60*time.Second, "how long to wait for the link button")
 	force := fs.Bool("force", false, "pair again even if this bridge already has a key")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 
@@ -180,7 +184,7 @@ func (a *app) authStatus(args []string) error {
 	fs := flag.NewFlagSet("hue auth status", flag.ContinueOnError)
 	backend := fs.String("store", secrets.BackendAuto, "credential store to read: auto, keyring or file")
 	offline := fs.Bool("offline", false, "do not contact the bridges")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 	cfg, err := config.Load()
@@ -234,7 +238,7 @@ func (a *app) authForget(args []string) error {
 	id := fs.String("id", "", "bridge id (default: the default bridge)")
 	backend := fs.String("store", secrets.BackendAuto, "credential store: auto, keyring or file")
 	yes := fs.Bool("yes", false, "do not ask for confirmation")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 	cfg, err := config.Load()

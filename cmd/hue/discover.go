@@ -19,7 +19,7 @@ func (a *app) discover(args []string) error {
 	timeout := fs.Duration("timeout", hue.DefaultMDNSTimeout, "how long to wait for mDNS answers")
 	mdnsOnly := fs.Bool("mdns-only", false, "do not fall back to the cloud discovery service")
 	iface := fs.String("interface", "", "network interface to query on (default: let the kernel choose)")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 

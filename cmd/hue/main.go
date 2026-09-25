@@ -85,6 +85,9 @@ func run(args []string) error {
 	case "auth":
 		return a.auth(commandArgs)
 	case "version":
+		if len(commandArgs) > 0 {
+			return fmt.Errorf("version: unexpected argument %q", commandArgs[0])
+		}
 		fmt.Println("hue", version)
 		return nil
 	case "help", "-h", "--help":
@@ -93,6 +96,22 @@ func run(args []string) error {
 	default:
 		return fmt.Errorf("unknown command %q (try: hue help)", command)
 	}
+}
+
+// parseFlags parses a command's flags and refuses anything left over.
+//
+// The flag package stops at the first word that is not a flag and leaves it
+// in fs.Args() without complaint. Left unchecked, `hue auth version` would
+// silently start pairing. Every command goes through this helper so a typo
+// or a misplaced word is reported instead of ignored.
+func parseFlags(fs *flag.FlagSet, args []string) error {
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() > 0 {
+		return fmt.Errorf("%s: unexpected argument %q", fs.Name(), fs.Arg(0))
+	}
+	return nil
 }
 
 func printUsage(fs *flag.FlagSet) {
