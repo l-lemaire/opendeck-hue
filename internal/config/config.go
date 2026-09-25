@@ -38,6 +38,10 @@ type Config struct {
 	Version       int               `json:"version"`
 	DefaultBridge string            `json:"default_bridge,omitempty"`
 	Bridges       map[string]Bridge `json:"bridges"`
+	// PluginDebug makes the OpenDeck plugin write full debug output
+	// (protocol messages, HTTP dumps) to its log file. The plugin has no
+	// command line of its own, so this is how --debug reaches it.
+	PluginDebug bool `json:"plugin_debug,omitempty"`
 
 	path string // where it was loaded from; not serialised (lower-case field)
 }
@@ -50,6 +54,21 @@ func Dir() (string, error) {
 		return "", err
 	}
 	return filepath.Join(base, "hue"), nil
+}
+
+// PluginLogPath returns the plugin's log file, under $XDG_STATE_HOME
+// (default ~/.local/state), the XDG location for logs and other state that
+// is neither configuration nor cache.
+func PluginLogPath() (string, error) {
+	base := os.Getenv("XDG_STATE_HOME")
+	if base == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		base = filepath.Join(home, ".local", "state")
+	}
+	return filepath.Join(base, "opendeck-hue", "plugin.log"), nil
 }
 
 // Load reads the config file. A missing file yields an empty, usable Config.

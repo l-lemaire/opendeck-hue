@@ -66,6 +66,50 @@ check: fmt-check vet test
 tidy:
 	go mod tidy
 
+# ---------- OpenDeck plugin ----------
+
+PLUGIN_ID   := com.github.llemaire.hue.sdPlugin
+PLUGIN_DIR  := dist/$(PLUGIN_ID)
+PLUGIN_BIN  := opendeck-hue
+PLUGIN_PKG  := ./cmd/opendeck-hue
+OPENDECK_PLUGINS := $(HOME)/.config/opendeck/plugins
+
+.PHONY: plugin plugin-install plugin-uninstall opendeck-restart plugin-log
+
+# Assemble the plugin folder for this machine (Linux x86_64) under dist/:
+# the manifest, icons and property inspector from plugin/, plus the binary
+# at the path the manifest's CodePaths expects.
+plugin:
+	rm -rf $(PLUGIN_DIR)
+	mkdir -p $(PLUGIN_DIR)
+	cp -r plugin/. $(PLUGIN_DIR)/
+	go build -trimpath -ldflags '$(LDFLAGS)' -o $(PLUGIN_DIR)/x86_64-unknown-linux-gnu/bin/$(PLUGIN_BIN) $(PLUGIN_PKG)
+
+# Copy the assembled folder into OpenDeck's plugin directory. A symlink
+# would be nicer for development, but OpenDeck skips symlinked entries when
+# it scans the directory. OpenDeck loads plugins at startup, so restart it
+# afterwards (make opendeck-restart).
+plugin-install: plugin
+	mkdir -p $(OPENDECK_PLUGINS)
+	rm -rf $(OPENDECK_PLUGINS)/$(PLUGIN_ID)
+	cp -r $(PLUGIN_DIR) $(OPENDECK_PLUGINS)/$(PLUGIN_ID)
+	@echo "installed: $(OPENDECK_PLUGINS)/$(PLUGIN_ID)"
+
+plugin-uninstall:
+	rm -rf $(OPENDECK_PLUGINS)/$(PLUGIN_ID)
+
+# Restart the OpenDeck desktop app so it picks up the plugin. setsid detaches
+# it from this terminal; the sleep gives the old process time to exit.
+opendeck-restart:
+	-pkill -x opendeck
+	sleep 1
+	setsid -f opendeck >/dev/null 2>&1
+	@echo "OpenDeck restarted; see: make plugin-log"
+
+# Follow both logs: OpenDeck's own and the plugin's.
+plugin-log:
+	tail -n 20 -f $(HOME)/.local/share/opendeck/logs/opendeck.log $${XDG_STATE_HOME:-$(HOME)/.local/state}/opendeck-hue/plugin.log
+
 # ---------- cross-compilation ----------
 
 # Builds one binary per target into dist/<triple>/bin/<name>[.exe], matching

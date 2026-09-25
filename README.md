@@ -9,6 +9,9 @@ lights and toggle them. The plugin will reuse the same Go packages.
 
 ```
 cmd/hue/            the CLI executable
+cmd/opendeck-hue/   the OpenDeck plugin executable
+plugin/             plugin manifest, icons, property inspector pages
+internal/openaction/ plugin-side client for the OpenDeck (Stream Deck) protocol
 internal/hue/       Hue bridge client (discovery, TLS, pairing, lights)
 internal/secrets/   credential storage (desktop keyring, file fallback)
 internal/config/    non-secret state: known bridges, certificate pins
@@ -60,6 +63,21 @@ The bridge is found by joining the mDNS multicast group on UDP port 5353,
 sharing the port with Avahi and other clients. This is deliberate: Fedora's
 firewalld only lets mDNS traffic in on port 5353, so a reply to a query sent
 from a random port would be dropped.
+
+## OpenDeck plugin
+
+```
+make plugin-install     # build and copy the plugin into ~/.config/opendeck/plugins
+make opendeck-restart   # OpenDeck loads plugins at startup
+make plugin-log         # follow OpenDeck's log and the plugin's log
+bin/hue plugin status   # install path, log path, debug flag
+bin/hue plugin debug on # full protocol and HTTP dumps in the plugin log
+```
+
+The plugin reads the bridge address and certificate pin from
+`~/.config/hue/config.json` and the key from the keyring, so `hue auth` is the
+only setup. Its log is `~/.local/state/opendeck-hue/plugin.log`. OpenDeck's
+own log (`~/.local/share/opendeck/logs/opendeck.log`) uses UTC timestamps.
 
 ## Security notes
 

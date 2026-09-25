@@ -1,0 +1,65 @@
+{
+	"Name": "Philips Hue",
+	"Description": "Toggle Philips Hue lights, rooms and zones. Pair once with the hue CLI.",
+	"Author": "llemaire",
+	"Version": "0.1.0",
+	"Icon": "icons/plugin",
+	"Category": "Philips Hue",
+	"CategoryIcon": "icons/plugin",
+	"CodePaths": {
+		"x86_64-unknown-linux-gnu": "x86_64-unknown-linux-gnu/bin/opendeck-hue",
+		"aarch64-unknown-linux-gnu": "aarch64-unknown-linux-gnu/bin/opendeck-hue",
+		"x86_64-apple-darwin": "x86_64-apple-darwin/bin/opendeck-hue",
+		"aarch64-apple-darwin": "aarch64-apple-darwin/bin/opendeck-hue",
+		"x86_64-pc-windows-msvc": "x86_64-pc-windows-msvc/bin/opendeck-hue.exe"
+	},
+	"CodePathLin": "x86_64-unknown-linux-gnu/bin/opendeck-hue",
+	"CodePathMac": "x86_64-apple-darwin/bin/opendeck-hue",
+	"CodePathWin": "x86_64-pc-windows-msvc/bin/opendeck-hue.exe",
+	"OS": [
+		{ "Platform": "linux" },
+		{ "Platform": "mac", "MinimumVersion": "10.11" },
+		{ "Platform": "windows", "MinimumVersion": "10" }
+	],
+	"Actions": [
+		{
+			"UUID": "com.github.llemaire.hue.toggle-light",
+			"Name": "Toggle light",
+			"Tooltip": "Switch one Hue light on or off",
+			"Icon": "icons/light",
+			"Controllers": ["Keypad"],
+			"SupportedInMultiActions": true,
+			"DisableAutomaticStates": true,
+			"States": [
+				{ "Image": "icons/light-off", "Name": "Off" },
+				{ "Image": "icons/light-on", "Name": "On" }
+			]
+		},
+		{
+			"UUID": "com.github.llemaire.hue.toggle-room",
+			"Name": "Toggle room",
+			"Tooltip": "Switch all lights of a Hue room on or off",
+			"Icon": "icons/room",
+			"Controllers": ["Keypad"],
+			"SupportedInMultiActions": true,
+			"DisableAutomaticStates": true,
+			"States": [
+				{ "Image": "icons/room-off", "Name": "Off" },
+				{ "Image": "icons/room-on", "Name": "On" }
+			]
+		},
+		{
+			"UUID": "com.github.llemaire.hue.toggle-zone",
+			"Name": "Toggle zone",
+			"Tooltip": "Switch all lights of a Hue zone on or off",
+			"Icon": "icons/zone",
+			"Controllers": ["Keypad"],
+			"SupportedInMultiActions": true,
+			"DisableAutomaticStates": true,
+			"States": [
+				{ "Image": "icons/zone-off", "Name": "Off" },
+				{ "Image": "icons/zone-on", "Name": "On" }
+			]
+		}
+	]
+}
