@@ -9,6 +9,7 @@ import (
 
 	"github.com/l-lemaire/opendeck-hue/internal/config"
 	"github.com/l-lemaire/opendeck-hue/internal/hue"
+	"github.com/l-lemaire/opendeck-hue/internal/pairing"
 	"github.com/l-lemaire/opendeck-hue/internal/secrets"
 )
 
@@ -23,6 +24,8 @@ type bridgeConnector interface {
 	Connect(ctx context.Context, bridgeID string) (*hue.Client, config.Bridge, error)
 	// Bridges lists the known bridges for the property inspector.
 	Bridges() ([]config.Bridge, string, error)
+	// Pair runs the pairing flow (see internal/pairing), reporting progress.
+	Pair(ctx context.Context, addr string, report func(pairing.Progress)) (config.Bridge, error)
 }
 
 // fileConnector is the real implementation backed by ~/.config/hue.
@@ -49,6 +52,26 @@ func (f *fileConnector) Bridges() ([]config.Bridge, string, error) {
 	return bridges, cfg.DefaultBridge, nil
 }
 
+// Pair pairs with a bridge (found by discovery, or at addr when given) and
+// stores the key in the same credential store the CLI uses.
+func (f *fileConnector) Pair(ctx context.Context, addr string, report func(pairing.Progress)) (config.Bridge, error) {
+	store, err := f.store()
+	if err != nil {
+		return config.Bridge{}, err
+	}
+	return pairing.Run(ctx, pairing.Options{Addr: addr, Store: store, Report: report, Log: f.log})
+}
+
+// store opens the credential store: keyring, or the file fallback next to
+// the config file.
+func (f *fileConnector) store() (secrets.Store, error) {
+	dir, err := config.Dir()
+	if err != nil {
+		return nil, err
+	}
+	return secrets.Open(secrets.BackendAuto, filepath.Join(dir, "credentials.json"), f.log)
+}
+
 func (f *fileConnector) Connect(ctx context.Context, bridgeID string) (*hue.Client, config.Bridge, error) {
 	cfg, err := config.Load()
 	if err != nil {
@@ -65,11 +88,7 @@ func (f *fileConnector) Connect(ctx context.Context, bridgeID string) (*hue.Clie
 		return c, b, nil
 	}
 
-	dir, err := config.Dir()
-	if err != nil {
-		return nil, config.Bridge{}, err
-	}
-	store, err := secrets.Open(secrets.BackendAuto, filepath.Join(dir, "credentials.json"), f.log)
+	store, err := f.store()
 	if err != nil {
 		return nil, config.Bridge{}, err
 	}

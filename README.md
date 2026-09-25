@@ -17,35 +17,28 @@ Put your Philips Hue lights, rooms and zones on Stream Deck keys with
 ## Install
 
 1. Download `opendeck-hue-<version>.streamDeckPlugin` from the
-   [releases page](../../releases), together with the `hue` command-line
-   tool for your platform.
+   [releases page](../../releases).
 2. In OpenDeck, open **Settings > Plugins** and install the downloaded file.
    Alternatively unzip it into OpenDeck's plugin folder
    (`~/.config/opendeck/plugins/` on Linux) and restart OpenDeck.
 
 ## Pair with your bridge
 
-Pairing is done once, from a terminal, with the `hue` tool:
+Pairing is done once, from inside OpenDeck:
 
-```
-hue auth
-```
+1. Drag any of the three actions onto a key.
+2. The panel below the key says no bridge is paired yet and offers a
+   **Pair with bridge** button. Press it.
+3. When the panel asks, press the round button on your Hue bridge. A countdown
+   shows how long you have.
+4. The panel switches to the list of your lights. Done.
 
-It finds your bridge on the network, asks you to press the round button on
-the bridge, and saves the resulting key in your keyring. Your desktop may ask
-you to allow access to the keyring; accept it.
+Your desktop may ask whether OpenDeck's plugin may use the keyring; accept it.
+If the bridge is not found automatically, type its address in the field above
+the button. The Hue app shows it under Settings > My Hue system.
 
-Check that everything works:
-
-```
-hue auth status
-```
-
-If OpenDeck was running during pairing, restart it once.
-
-Several bridges? `hue auth` pairs one at a time; run it again with `--id` to
-choose. If your bridge is not found automatically, pass its address:
-`hue auth --ip 192.168.1.42`.
+The same can be done from a terminal with the `hue` tool, see below:
+`hue auth`.
 
 ## Use the plugin
 
@@ -65,8 +58,10 @@ not reach the bridge or the target no longer exists. See Troubleshooting.
 
 ## The `hue` command-line tool
 
-The same tool that pairs can also control lights, handy for scripts or a quick
-check from a terminal.
+Optional. It pairs, lists and switches lights from a terminal, for scripts or
+a quick check. Download `hue-<version>-<platform>.tar.gz` (`.zip` on Windows)
+from the releases page, unpack it, and run `./hue` from that folder, or move
+the file somewhere on your `PATH`.
 
 ```
 hue discover                        find bridges on the network
@@ -93,14 +88,13 @@ bridge; the key is redacted.
 ## Troubleshooting
 
 - **The list in the key panel is empty or shows an error.** The message is
-  the actual cause. Most often the bridge is not paired yet: run `hue auth`
-  and restart OpenDeck.
+  the actual cause. If the panel offers to pair, no bridge is paired yet.
 - **"No bridge found".** The bridge must be on the same network. If your
   network blocks discovery, use `hue auth --ip <bridge address>`; the Hue app
   shows the address under Settings > My Hue system.
 - **A key flashes a warning triangle.** Run `hue auth status` to check the
   bridge connection, and `hue list lights` to see whether the target still
-  exists. If you replaced your bridge, pair again with `hue auth --force`.
+  exists. If you replaced your bridge, run `hue auth forget` and pair again.
 - **The key does not follow changes made elsewhere.** Restart OpenDeck. The
   plugin reconnects to the bridge automatically, but a change of network can
   need a fresh start.

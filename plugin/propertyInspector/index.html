@@ -12,6 +12,22 @@
 		<script src="pi.js"></script>
 	</head>
 	<body>
+		<!-- Shown instead of the target picker while no bridge is paired. -->
+		<section id="pair" hidden>
+			<p class="intro">No Hue bridge is paired yet. Pairing takes a minute and is done once.</p>
+			<div class="row">
+				<label for="pair-address">Address</label>
+				<input id="pair-address" type="text" placeholder="optional, e.g. 192.168.1.42" />
+			</div>
+			<div class="row">
+				<label></label>
+				<button id="pair-button" type="button">Pair with bridge</button>
+			</div>
+			<p id="pair-status" class="status"></p>
+			<p id="pair-countdown" class="countdown" hidden></p>
+		</section>
+
+		<section id="configure">
 		<div class="row" id="bridge-row" hidden>
 			<label for="bridge">Bridge</label>
 			<select id="bridge"></select>
@@ -43,5 +59,6 @@
 			</button>
 		</div>
 		<p id="status" class="status busy">Connecting…</p>
+		</section>
 	</body>
 </html>

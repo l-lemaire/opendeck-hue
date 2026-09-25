@@ -5,22 +5,16 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"text/tabwriter"
-	"time"
 
 	"github.com/l-lemaire/opendeck-hue/internal/config"
 	"github.com/l-lemaire/opendeck-hue/internal/hue"
+	"github.com/l-lemaire/opendeck-hue/internal/pairing"
 	"github.com/l-lemaire/opendeck-hue/internal/secrets"
 )
-
-// appName is the first half of the "devicetype" the bridge records for our
-// key. It shows up in the Hue app under Settings > Apps.
-const appName = "hue-cli"
 
 // auth dispatches `hue auth`, `hue auth status` and `hue auth forget`.
 // A first word that is neither a known subcommand nor a flag is an error,
@@ -57,22 +51,17 @@ func (a *app) openStore(backend string) (secrets.Store, error) {
 	return store, nil
 }
 
-// authPair implements `hue auth`: find the bridge, verify its certificate,
-// wait for the link button, save the key.
+// authPair implements `hue auth`: the shared pairing flow with progress
+// printed to the terminal.
 func (a *app) authPair(args []string) error {
 	fs := flag.NewFlagSet("hue auth", flag.ContinueOnError)
 	ip := fs.String("ip", "", "bridge address (host or host:port) instead of discovery")
 	id := fs.String("id", "", "bridge id to pair with when several are found")
-	device := fs.String("name", defaultDeviceName(), "device name recorded on the bridge (max 19 chars)")
+	device := fs.String("name", "", "device name recorded on the bridge (max 19 chars; default: host name)")
 	backend := fs.String("store", secrets.BackendAuto, "where to keep the key: auto, keyring or file")
-	timeout := fs.Duration("timeout", 60*time.Second, "how long to wait for the link button")
+	timeout := fs.Duration("timeout", pairing.DefaultTimeout, "how long to wait for the link button")
 	force := fs.Bool("force", false, "pair again even if this bridge already has a key")
 	if err := parseFlags(fs, args); err != nil {
-		return err
-	}
-
-	cfg, err := config.Load()
-	if err != nil {
 		return err
 	}
 	store, err := a.openStore(*backend)
@@ -80,102 +69,40 @@ func (a *app) authPair(args []string) error {
 		return err
 	}
 
-	// Step 1: decide which bridge to talk to.
-	addr, expectedID, name, model, err := a.pickBridge(*ip, *id)
-	if err != nil {
-		return err
-	}
-
-	// Step 2: probe the public config endpoint. This is the first TLS
-	// handshake: the certificate's CN must match the id (when known) and we
-	// learn the fingerprint to pin.
-	probe := hue.NewClient(hue.ClientOptions{Addr: addr, ID: expectedID, Log: a.log})
-	info, err := probe.Info(a.ctx)
-	if err != nil {
-		return fmt.Errorf("cannot reach bridge at %s: %w", addr, err)
-	}
-	if expectedID != "" && info.ID != expectedID {
-		return fmt.Errorf("bridge at %s reports id %s, expected %s", addr, info.ID, expectedID)
-	}
-	_, fp, ok := probe.SeenCertificate()
-	if !ok {
-		return errors.New("internal error: no certificate recorded")
-	}
-	if name == "" {
-		name = info.Name
-	}
-	if model == "" {
-		model = info.Model
-	}
-
-	// Step 3: refuse to silently create a second key for a paired bridge.
-	if !*force {
-		if _, err := hue.LoadCredentials(store, info.ID); err == nil {
-			return fmt.Errorf("bridge %s already has a key in the %s; use --force to pair again", info.ID, store.Name())
-		}
-	}
-
-	// Step 4: wait for the button.
-	fmt.Printf("Bridge %s (%s, %s) at %s\n", name, info.ID, model, addr)
-	fmt.Printf("Press the round link button on the bridge now. Waiting up to %s", timeout.Round(time.Second))
-	client := hue.NewClient(hue.ClientOptions{Addr: addr, ID: info.ID, Fingerprint: fp, Log: a.log})
-	creds, err := client.Pair(a.ctx, appName, *device, *timeout, func(int) { fmt.Print(".") })
-	fmt.Println()
-	if err != nil {
-		return err
-	}
-
-	// Step 5: persist. Secret in the store, everything else in the config.
-	if err := hue.SaveCredentials(store, info.ID, creds); err != nil {
-		return err
-	}
-	cfg.Put(config.Bridge{
-		ID: info.ID, Host: hostOf(addr), Port: portOf(addr),
-		Name: name, Model: model, Fingerprint: fp, PairedAt: time.Now(),
-	})
-	if err := cfg.Save(); err != nil {
-		return err
-	}
-
-	fmt.Printf("Paired. Application key %s… saved in the %s.\n", creds.AppKey[:4], store.Name())
-	fmt.Printf("Bridge details and certificate fingerprint saved in %s.\n", cfg.Path())
-	return nil
-}
-
-// pickBridge turns --ip/--id into a concrete address and, when known, id.
-func (a *app) pickBridge(ip, id string) (addr, bridgeID, name, model string, err error) {
-	if ip != "" {
-		if _, _, splitErr := net.SplitHostPort(ip); splitErr != nil {
-			ip = net.JoinHostPort(ip, "443")
-		}
-		return ip, strings.ToLower(id), "", "", nil
-	}
-
-	fmt.Fprintln(os.Stderr, "Looking for bridges...")
-	bridges, err := hue.Discovery{Log: a.log}.Discover(a.ctx)
-	if err != nil {
-		return "", "", "", "", err
-	}
-	switch {
-	case len(bridges) == 0:
-		return "", "", "", "", errors.New("no bridge found; pass its address with --ip")
-	case id != "":
-		for _, b := range bridges {
-			if b.ID == strings.ToLower(id) {
-				return b.Addr(), b.ID, b.Name, b.Model, nil
+	waiting := false
+	bridge, err := pairing.Run(a.ctx, pairing.Options{
+		Addr: *ip, ID: *id, DeviceName: *device, Store: store, Timeout: *timeout, Force: *force, Log: a.log,
+		Report: func(p pairing.Progress) {
+			switch p.Stage {
+			case pairing.StageWaiting:
+				if !waiting {
+					fmt.Printf("%s. Waiting up to %ds", p.Message, p.SecondsLeft)
+					waiting = true
+				} else {
+					fmt.Print(".")
+				}
+			default:
+				if waiting {
+					fmt.Println()
+					waiting = false
+				}
+				fmt.Println(p.Message)
 			}
-		}
-		return "", "", "", "", fmt.Errorf("bridge %s not found on the network", id)
-	case len(bridges) > 1:
-		var ids []string
-		for _, b := range bridges {
-			ids = append(ids, b.ID+" ("+b.Addr()+")")
-		}
-		return "", "", "", "", fmt.Errorf("several bridges found, choose one with --id: %s", strings.Join(ids, ", "))
-	default:
-		b := bridges[0]
-		return b.Addr(), b.ID, b.Name, b.Model, nil
+		},
+	})
+	if waiting {
+		fmt.Println()
 	}
+	if err != nil {
+		if errors.Is(err, pairing.ErrAlreadyPaired) {
+			return fmt.Errorf("%v; use --force to pair again", err)
+		}
+		return err
+	}
+	cfgPath, _ := config.Dir()
+	fmt.Printf("Bridge details and certificate fingerprint saved in %s.\n", filepath.Join(cfgPath, "config.json"))
+	_ = bridge
+	return nil
 }
 
 // authStatus implements `hue auth status`: lists known bridges and checks
@@ -271,37 +198,4 @@ func (a *app) authForget(args []string) error {
 	}
 	fmt.Printf("Forgot bridge %s. The key still exists on the bridge; revoke it in the Hue app if needed.\n", b.ID)
 	return nil
-}
-
-// defaultDeviceName is the host name, trimmed to what the bridge accepts.
-func defaultDeviceName() string {
-	host, err := os.Hostname()
-	if err != nil || host == "" {
-		host = "computer"
-	}
-	host = strings.Split(host, ".")[0] // drop a domain suffix
-	if len(host) > 19 {
-		host = host[:19]
-	}
-	return host
-}
-
-func hostOf(addr string) string {
-	host, _, err := net.SplitHostPort(addr)
-	if err != nil {
-		return addr
-	}
-	return host
-}
-
-func portOf(addr string) int {
-	_, port, err := net.SplitHostPort(addr)
-	if err != nil {
-		return 443
-	}
-	n, err := strconv.Atoi(port)
-	if err != nil {
-		return 443
-	}
-	return n
 }

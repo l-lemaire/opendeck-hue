@@ -73,12 +73,21 @@ function requestTargets() {
 }
 
 function onPluginMessage(payload) {
+	if (payload.event === "pairing") {
+		onPairingProgress(payload);
+		return;
+	}
 	if (payload.event === "error") {
+		if (payload.code === "not_paired") {
+			showPairing(true);
+			return;
+		}
 		setStatus(payload.message, "error");
 		$("target").innerHTML = '<option value="">Unavailable</option>';
 		return;
 	}
 	if (payload.event !== "targets") return;
+	showPairing(false);
 
 	// Bridge selector: only shown when more than one bridge is paired.
 	const bridgeSelect = $("bridge");
@@ -149,6 +158,54 @@ function saveSettings(message) {
 // "error" or undefined for neutral.
 function setStatus(text, state) {
 	const el = $("status");
+	el.textContent = text;
+	el.className = "status" + (state ? " " + state : "");
+}
+
+// ---- Pairing from the panel ----
+// The plugin runs the same flow as `hue auth` and reports each stage.
+
+function showPairing(show) {
+	$("pair").hidden = !show;
+	$("configure").hidden = show;
+}
+
+function startPairing() {
+	$("pair-button").disabled = true;
+	$("pair-countdown").hidden = true;
+	setPairStatus("Starting…", "busy");
+	sendToPlugin({ event: "pair", address: $("pair-address").value.trim() });
+}
+
+function onPairingProgress(payload) {
+	const countdown = $("pair-countdown");
+	switch (payload.stage) {
+		case "searching":
+		case "found":
+			setPairStatus(payload.message, "busy");
+			break;
+		case "waiting":
+			setPairStatus(payload.message, "busy");
+			countdown.hidden = false;
+			countdown.textContent = payload.seconds_left + " s";
+			break;
+		case "paired":
+			countdown.hidden = true;
+			setPairStatus(payload.message, "ok");
+			$("pair-button").disabled = false;
+			// Switch to the normal view and load the targets.
+			setTimeout(requestTargets, 800);
+			break;
+		case "error":
+			countdown.hidden = true;
+			setPairStatus(payload.message, "error");
+			$("pair-button").disabled = false;
+			break;
+	}
+}
+
+function setPairStatus(text, state) {
+	const el = $("pair-status");
 	el.textContent = text;
 	el.className = "status" + (state ? " " + state : "");
 }

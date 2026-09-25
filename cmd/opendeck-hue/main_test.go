@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log"
 	"net/http"
@@ -18,6 +19,7 @@ import (
 	"github.com/l-lemaire/opendeck-hue/internal/hue"
 	"github.com/l-lemaire/opendeck-hue/internal/hue/huetest"
 	"github.com/l-lemaire/opendeck-hue/internal/openaction"
+	"github.com/l-lemaire/opendeck-hue/internal/pairing"
 )
 
 // fakeConnector points the plugin at a huetest bridge, bypassing the config
@@ -25,6 +27,10 @@ import (
 type fakeConnector struct {
 	fb     *huetest.Bridge
 	client *hue.Client
+
+	unpaired   bool  // Bridges() returns nothing until Pair succeeds
+	pairErr    error // Pair fails with this when set
+	pairedWith string
 }
 
 func (f *fakeConnector) Connect(ctx context.Context, id string) (*hue.Client, config.Bridge, error) {
@@ -32,13 +38,38 @@ func (f *fakeConnector) Connect(ctx context.Context, id string) (*hue.Client, co
 }
 
 func (f *fakeConnector) Bridges() ([]config.Bridge, string, error) {
+	if f.unpaired {
+		return nil, "", nil
+	}
 	return []config.Bridge{{ID: f.fb.ID, Name: "Fake Bridge"}}, f.fb.ID, nil
+}
+
+// Pair simulates the flow: a few progress steps, then success (and the
+// connector becomes "paired") or the configured error.
+func (f *fakeConnector) Pair(ctx context.Context, addr string, report func(pairing.Progress)) (config.Bridge, error) {
+	f.pairedWith = addr
+	report(pairing.Progress{Stage: pairing.StageSearching, Message: "Looking"})
+	if f.pairErr != nil {
+		return config.Bridge{}, f.pairErr
+	}
+	report(pairing.Progress{Stage: pairing.StageFound, Message: "Found Fake Bridge"})
+	report(pairing.Progress{Stage: pairing.StageWaiting, Message: "Press the button", SecondsLeft: 60})
+	report(pairing.Progress{Stage: pairing.StagePaired, Message: "Paired"})
+	f.unpaired = false
+	return config.Bridge{ID: f.fb.ID, Name: "Fake Bridge"}, nil
 }
 
 // startPlugin wires a plugin to a fake host and a fake bridge and runs its
 // event loop. It returns the host side of the WebSocket, a channel of
 // decoded messages the plugin sent, and the fake bridge.
 func startPlugin(t *testing.T) (*websocket.Conn, chan map[string]any, *huetest.Bridge) {
+	host, sent, fb, _ := startPluginWith(t, &fakeConnector{})
+	return host, sent, fb
+}
+
+// startPluginWith is startPlugin with a caller-provided connector, whose fb
+// and client fields are filled in here.
+func startPluginWith(t *testing.T, connector *fakeConnector) (*websocket.Conn, chan map[string]any, *huetest.Bridge, *fakeConnector) {
 	t.Helper()
 	fb := huetest.New(t, "001788fffe000001")
 	client := hue.NewClient(hue.ClientOptions{Addr: fb.Addr(), ID: fb.ID, Fingerprint: fb.Fingerprint, AppKey: fb.AppKey})
@@ -74,14 +105,15 @@ func startPlugin(t *testing.T) (*websocket.Conn, chan map[string]any, *huetest.B
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := &plugin{conn: conn, info: log.New(io.Discard, "", 0), debug: debug, bridges: &fakeConnector{fb: fb, client: client}}
+	connector.fb, connector.client = fb, client
+	p := &plugin{conn: conn, info: log.New(io.Discard, "", 0), debug: debug, bridges: connector}
 	go conn.Run(ctx, p.handlers())
 
 	host := <-hostConn
 	if reg := next(t, sent); reg["event"] != "registerPlugin" {
 		t.Fatalf("first message = %v", reg)
 	}
-	return host, sent, fb
+	return host, sent, fb, connector
 }
 
 // expect pulls messages until one with the given event arrives, failing on
@@ -372,5 +404,64 @@ func TestWillAppearWithLabelNoneClearsTitle(t *testing.T) {
 	m := expectEvent(t, sent, "setTitle")
 	if m["payload"].(map[string]any)["title"] != "" {
 		t.Errorf("title = %v, want empty", m)
+	}
+}
+
+func TestUnpairedInspectorGetsNotPairedCode(t *testing.T) {
+	host, sent, _, _ := startPluginWith(t, &fakeConnector{unpaired: true})
+	push(t, host, map[string]any{
+		"event": "sendToPlugin", "action": actionPrefix + "toggle-light", "context": "ctx-p1",
+		"payload": map[string]any{"event": "listTargets"},
+	})
+	payload := next(t, sent)["payload"].(map[string]any)
+	if payload["event"] != "error" || payload["code"] != "not_paired" {
+		t.Errorf("payload = %v", payload)
+	}
+}
+
+func TestPairFromInspector(t *testing.T) {
+	host, sent, _, connector := startPluginWith(t, &fakeConnector{unpaired: true})
+	push(t, host, map[string]any{
+		"event": "sendToPlugin", "action": actionPrefix + "toggle-light", "context": "ctx-p2",
+		"payload": map[string]any{"event": "pair", "address": "10.0.0.5"},
+	})
+	var stages []string
+	for len(stages) < 4 {
+		m := expectEvent(t, sent, "sendToPropertyInspector")
+		payload := m["payload"].(map[string]any)
+		if payload["event"] != "pairing" {
+			t.Fatalf("payload = %v", payload)
+		}
+		stages = append(stages, payload["stage"].(string))
+		if payload["stage"] == "waiting" && payload["seconds_left"] != float64(60) {
+			t.Errorf("waiting payload = %v", payload)
+		}
+	}
+	if stages[0] != "searching" || stages[3] != "paired" {
+		t.Errorf("stages = %v", stages)
+	}
+	if connector.pairedWith != "10.0.0.5" {
+		t.Errorf("address passed = %q", connector.pairedWith)
+	}
+	// The panel now lists targets normally.
+	push(t, host, map[string]any{
+		"event": "sendToPlugin", "action": actionPrefix + "toggle-light", "context": "ctx-p2",
+		"payload": map[string]any{"event": "listTargets"},
+	})
+	if payload := next(t, sent)["payload"].(map[string]any); payload["event"] != "targets" {
+		t.Errorf("after pairing, payload = %v", payload)
+	}
+}
+
+func TestPairFailureReachesInspector(t *testing.T) {
+	host, sent, _, _ := startPluginWith(t, &fakeConnector{unpaired: true, pairErr: errors.New("link button not pressed after 60s")})
+	push(t, host, map[string]any{
+		"event": "sendToPlugin", "action": actionPrefix + "toggle-light", "context": "ctx-p3",
+		"payload": map[string]any{"event": "pair"},
+	})
+	expectEvent(t, sent, "sendToPropertyInspector") // searching
+	payload := expectEvent(t, sent, "sendToPropertyInspector")["payload"].(map[string]any)
+	if payload["stage"] != "error" || !strings.Contains(payload["message"].(string), "link button") {
+		t.Errorf("payload = %v", payload)
 	}
 }

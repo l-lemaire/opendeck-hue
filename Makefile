@@ -7,7 +7,7 @@
 #   make check      gofmt + go vet + tests (run before committing)
 #   make cross      build hue for every OpenDeck target triple into ./dist/cli/
 #   make plugin-install   build the OpenDeck plugin and copy it into OpenDeck
-#   make plugin-release   cross-compile the plugin and zip it for distribution
+#   make plugin-release   plugin zip + CLI archives for every platform (release assets)
 #   make clean      remove build outputs
 
 # ---------- settings ----------
@@ -121,7 +121,7 @@ opendeck-restart:
 RELEASE := dist/opendeck-hue-$(SEMVER).streamDeckPlugin
 
 .PHONY: plugin-release
-plugin-release:
+plugin-release: cli-release
 	rm -rf $(PLUGIN_DIR) $(RELEASE)
 	mkdir -p $(PLUGIN_DIR)
 	cp -r plugin/. $(PLUGIN_DIR)/
@@ -152,6 +152,20 @@ endef
 # The CLI for every platform, under dist/cli/.
 cross:
 	$(call cross-build,$(PKG),$(BIN),dist/cli)
+
+# One archive per platform with the CLI binary and the license, for the
+# release page: hue-<version>-<triple>.tar.gz (zip on Windows).
+.PHONY: cli-release
+cli-release: cross
+	@for t in $(TARGETS); do \
+		triple=$${t%%:*}; rest=$${t#*:}; goos=$${rest%%:*}; \
+		ext=""; [ "$$goos" = "windows" ] && ext=".exe"; \
+		stage=dist/stage/hue-$(SEMVER)-$$triple; rm -rf $$stage; mkdir -p $$stage; \
+		cp dist/cli/$$triple/bin/$(BIN)$$ext LICENSE $$stage/; \
+		if [ "$$goos" = "windows" ]; then (cd dist/stage && zip -qr ../hue-$(SEMVER)-$$triple.zip hue-$(SEMVER)-$$triple); \
+		else tar -C dist/stage -czf dist/hue-$(SEMVER)-$$triple.tar.gz hue-$(SEMVER)-$$triple; fi; \
+		echo "  dist/hue-$(SEMVER)-$$triple.$$([ "$$goos" = windows ] && echo zip || echo tar.gz)"; \
+	done; rm -rf dist/stage
 
 clean:
 	rm -rf bin dist coverage.out

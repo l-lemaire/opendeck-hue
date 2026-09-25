@@ -3,10 +3,13 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"time"
 
 	"github.com/l-lemaire/opendeck-hue/internal/hue"
 	"github.com/l-lemaire/opendeck-hue/internal/openaction"
+	"github.com/l-lemaire/opendeck-hue/internal/pairing"
 )
 
 // The property inspector (plugin/propertyInspector/index.html) cannot reach
@@ -17,11 +20,26 @@ import (
 //	inspector -> plugin   {"event":"listTargets","bridge":"<id or empty>"}
 //	plugin -> inspector   {"event":"targets","bridges":[...],"bridge":"<id>",
 //	                       "items":[{"id":..,"name":..,"on":..,"grouped_light":..}]}
-//	plugin -> inspector   {"event":"error","message":"..."}
+//	plugin -> inspector   {"event":"error","code":"not_paired"|"","message":"..."}
+//
+//	inspector -> plugin   {"event":"pair","address":"<optional host[:port]>"}
+//	plugin -> inspector   {"event":"pairing","stage":"searching|found|waiting|paired|error",
+//	                       "message":"...","seconds_left":N}
+//
+// Pairing from the panel means a user never needs the CLI: the plugin runs
+// the same flow (internal/pairing) and stores the key in the same keyring.
 
 type inspectorRequest struct {
-	Event  string `json:"event"`
-	Bridge string `json:"bridge"`
+	Event   string `json:"event"`
+	Bridge  string `json:"bridge"`
+	Address string `json:"address"`
+}
+
+type pairingReply struct {
+	Event       string `json:"event"`
+	Stage       string `json:"stage"`
+	Message     string `json:"message"`
+	SecondsLeft int    `json:"seconds_left,omitempty"`
 }
 
 type targetItem struct {
@@ -47,8 +65,13 @@ type targetsReply struct {
 
 type errorReply struct {
 	Event   string `json:"event"`
+	Code    string `json:"code,omitempty"` // "not_paired" tells the panel to offer pairing
 	Message string `json:"message"`
 }
+
+// errNotPaired marks the "no bridge yet" case so the panel can show the
+// Pair button instead of a bare error.
+var errNotPaired = errors.New("no bridge paired yet")
 
 // handleInspectorMessage serves sendToPlugin events. Errors are reported to
 // the inspector so the user sees them, and returned so they are logged.
@@ -61,10 +84,16 @@ func (p *plugin) handleInspectorMessage(ctx context.Context, ev openaction.Event
 	case "listTargets":
 		reply, err := p.listTargets(ctx, ev.Action, req.Bridge)
 		if err != nil {
-			p.conn.SendToPropertyInspector(ctx, ev.Action, ev.Context, errorReply{Event: "error", Message: err.Error()})
+			code := ""
+			if errors.Is(err, errNotPaired) {
+				code = "not_paired"
+			}
+			p.conn.SendToPropertyInspector(ctx, ev.Action, ev.Context, errorReply{Event: "error", Code: code, Message: err.Error()})
 			return err
 		}
 		return p.conn.SendToPropertyInspector(ctx, ev.Action, ev.Context, reply)
+	case "pair":
+		return p.startPairing(ctx, ev, req.Address)
 	default:
 		return fmt.Errorf("inspector sent unknown event %q", req.Event)
 	}
@@ -82,7 +111,7 @@ func (p *plugin) listTargets(ctx context.Context, action, bridgeID string) (targ
 		return targetsReply{}, err
 	}
 	if len(known) == 0 {
-		return targetsReply{}, fmt.Errorf("no bridge paired: run `hue auth` in a terminal first")
+		return targetsReply{}, errNotPaired
 	}
 	client, bridge, err := p.bridges.Connect(ctx, bridgeID)
 	if err != nil {
@@ -120,4 +149,32 @@ func (p *plugin) listTargets(ctx context.Context, action, bridgeID string) (targ
 		reply.Items = []targetItem{} // "[]" rather than "null" in the JSON
 	}
 	return reply, nil
+}
+
+// startPairing runs the pairing flow in a goroutine, forwarding each
+// progress step to the panel. Only one pairing runs at a time.
+func (p *plugin) startPairing(ctx context.Context, ev openaction.Event, address string) error {
+	if !p.inflight.begin("pairing") {
+		return p.conn.SendToPropertyInspector(ctx, ev.Action, ev.Context,
+			pairingReply{Event: "pairing", Stage: "error", Message: "A pairing is already in progress"})
+	}
+	p.info.Printf("pairing requested from the panel (address %q)", address)
+	go func() {
+		defer p.inflight.end("pairing")
+		ctx, cancel := context.WithTimeout(ctx, pairing.DefaultTimeout+30*time.Second)
+		defer cancel()
+
+		bridge, err := p.bridges.Pair(ctx, address, func(pr pairing.Progress) {
+			p.conn.SendToPropertyInspector(ctx, ev.Action, ev.Context,
+				pairingReply{Event: "pairing", Stage: pr.Stage, Message: pr.Message, SecondsLeft: pr.SecondsLeft})
+		})
+		if err != nil {
+			p.info.Printf("pairing failed: %v", err)
+			p.conn.SendToPropertyInspector(ctx, ev.Action, ev.Context,
+				pairingReply{Event: "pairing", Stage: "error", Message: err.Error()})
+			return
+		}
+		p.info.Printf("paired with bridge %s (%s)", bridge.ID, bridge.Name)
+	}()
+	return nil
 }

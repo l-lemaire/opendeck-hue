@@ -149,3 +149,16 @@ button svg { width: 14px; height: 14px; }
 	0%, 100% { opacity: 1; }
 	50% { opacity: 0.3; }
 }
+
+/* Pairing section */
+.intro {
+	margin: 0 0 10px 0;
+	color: var(--text);
+}
+.countdown {
+	margin: 4px 0 0 86px;
+	font-size: 26px;
+	font-weight: 600;
+	color: var(--accent);
+	font-variant-numeric: tabular-nums;
+}
