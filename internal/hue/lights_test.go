@@ -95,6 +95,11 @@ func TestGroups(t *testing.T) {
 	if len(groups) != 2 || groups[0].Name != "Kitchen" || groups[1].Name != "Office" {
 		t.Fatalf("groups = %+v", groups)
 	}
+	rooms, _ := c.Rooms(ctx)
+	zones, _ := c.Zones(ctx)
+	if len(rooms) != 1 || rooms[0].Kind != "room" || len(zones) != 1 || zones[0].Kind != "zone" {
+		t.Errorf("rooms = %+v, zones = %+v", rooms, zones)
+	}
 	kitchen, office := groups[0], groups[1]
 	if kitchen.Kind != "room" || !kitchen.On || kitchen.Members != 1 || kitchen.GroupedLightID != groupedKitchn {
 		t.Errorf("kitchen = %+v", kitchen)

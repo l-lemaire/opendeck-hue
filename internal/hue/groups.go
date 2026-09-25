@@ -49,15 +49,31 @@ type GroupedLight struct {
 	} `json:"dimming,omitempty"`
 }
 
-// Groups lists rooms and zones with their current state, sorted by name.
-// Three GET requests: room, zone, grouped_light, joined in memory.
+// Rooms lists the rooms with their current state, sorted by name.
+func (c *Client) Rooms(ctx context.Context) ([]Group, error) {
+	return c.groups(ctx, "room")
+}
+
+// Zones lists the zones with their current state, sorted by name.
+func (c *Client) Zones(ctx context.Context) ([]Group, error) {
+	return c.groups(ctx, "zone")
+}
+
+// Groups lists rooms and zones together. Group.Kind tells them apart.
 func (c *Client) Groups(ctx context.Context) ([]Group, error) {
-	var rooms, zones []rawGroup
-	if err := c.v2(ctx, http.MethodGet, "room", nil, &rooms); err != nil {
-		return nil, err
-	}
-	if err := c.v2(ctx, http.MethodGet, "zone", nil, &zones); err != nil {
-		return nil, err
+	return c.groups(ctx, "room", "zone")
+}
+
+// groups fetches the given kinds ("room", "zone") plus grouped_light, and
+// joins them in memory: one GET per kind and one for the states.
+func (c *Client) groups(ctx context.Context, kinds ...string) ([]Group, error) {
+	var raws []rawGroup
+	for _, kind := range kinds {
+		var batch []rawGroup
+		if err := c.v2(ctx, http.MethodGet, kind, nil, &batch); err != nil {
+			return nil, err
+		}
+		raws = append(raws, batch...)
 	}
 	var grouped []GroupedLight
 	if err := c.v2(ctx, http.MethodGet, "grouped_light", nil, &grouped); err != nil {
@@ -68,8 +84,8 @@ func (c *Client) Groups(ctx context.Context) ([]Group, error) {
 		stateByID[g.ID] = g
 	}
 
-	groups := make([]Group, 0, len(rooms)+len(zones))
-	for _, raw := range append(rooms, zones...) {
+	groups := make([]Group, 0, len(raws))
+	for _, raw := range raws {
 		g := Group{ID: raw.ID, Name: raw.Metadata.Name, Kind: raw.Type, Members: len(raw.Children)}
 		for _, s := range raw.Services {
 			if s.RType == "grouped_light" {
