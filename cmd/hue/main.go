@@ -82,6 +82,8 @@ func run(args []string) error {
 	switch command {
 	case "discover":
 		return a.discover(commandArgs)
+	case "auth":
+		return a.auth(commandArgs)
 	case "version":
 		fmt.Println("hue", version)
 		return nil
@@ -98,8 +100,11 @@ func printUsage(fs *flag.FlagSet) {
 	fmt.Fprint(fs.Output(), `usage: hue [global flags] <command> [command flags]
 
 commands:
-  discover   find Hue bridges on the local network
-  version    print the version
+  discover      find Hue bridges on the local network
+  auth          pair with a bridge (press its link button) and store the key
+  auth status   list paired bridges and check their keys
+  auth forget   delete a bridge's key and configuration
+  version       print the version
 
 global flags (must come before the command):
 `)

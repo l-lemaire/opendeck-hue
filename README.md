@@ -9,8 +9,9 @@ lights and toggle them. The plugin will reuse the same Go packages.
 
 ```
 cmd/hue/            the CLI executable
-internal/hue/       Hue bridge client (discovery, pairing, TLS, lights)
+internal/hue/       Hue bridge client (discovery, TLS, pairing, lights)
 internal/secrets/   credential storage (desktop keyring, file fallback)
+internal/config/    non-secret state: known bridges, certificate pins
 Makefile            build, test, cross-compile for OpenDeck target triples
 ```
 
@@ -28,6 +29,9 @@ make cross              # one binary per OS/arch under dist/
 
 bin/hue discover                 # find bridges (mDNS, then cloud fallback)
 bin/hue discover --json
+bin/hue auth                     # pair: press the bridge's link button when asked
+bin/hue auth status              # list paired bridges and check their keys
+bin/hue auth forget              # delete a bridge's key and configuration
 bin/hue --debug discover         # show every packet and HTTP exchange
 ```
 
@@ -48,6 +52,18 @@ from a random port would be dropped.
 
 ## Security notes
 
-Hue application keys are secrets. They are stored in the desktop keyring by
-default and never written to OpenDeck's plaintext settings. See
-`internal/secrets`.
+**Credentials.** The Hue application key is a secret. `hue auth` stores it in
+the desktop keyring (Secret Service: GNOME Keyring, KDE Wallet) under the
+service name `streamdeck-lights`, one entry per bridge id. When no keyring is
+reachable, or with `--store file`, it falls back to
+`~/.config/hue/credentials.json` with 0600 permissions and prints a warning.
+The key is never written to OpenDeck's plaintext settings.
+
+**TLS.** The bridge's certificate is issued by Signify's private CA, which is
+not published, so standard verification cannot apply. Instead the client
+requires the certificate's common name to equal the bridge id and, after
+pairing, pins the certificate's SHA-256 fingerprint in `~/.config/hue/config.json`.
+A changed certificate is refused until you pair again.
+
+**Debug output** redacts the application key header; everything else is
+printed verbatim.
