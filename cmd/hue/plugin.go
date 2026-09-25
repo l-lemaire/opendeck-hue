@@ -7,12 +7,12 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/llemaire/streamdeck/internal/config"
+	"github.com/l-lemaire/streamdeck/internal/config"
 )
 
 // pluginID is the OpenDeck plugin directory name, shared with plugin/manifest.json
 // and the Makefile.
-const pluginID = "com.github.llemaire.hue.sdPlugin"
+const pluginID = "com.github.l-lemaire.hue.sdPlugin"
 
 // plugin dispatches `hue plugin status` and `hue plugin debug on|off`.
 // These manage the OpenDeck plugin from the CLI, since the plugin itself has

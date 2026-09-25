@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/llemaire/streamdeck/internal/hue"
-	"github.com/llemaire/streamdeck/internal/openaction"
+	"github.com/l-lemaire/streamdeck/internal/hue"
+	"github.com/l-lemaire/streamdeck/internal/openaction"
 )
 
 // Live state. The plugin keeps a registry of the buttons currently on the

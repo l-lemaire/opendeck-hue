@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/llemaire/streamdeck/internal/hue/huetest"
+	"github.com/l-lemaire/streamdeck/internal/hue/huetest"
 )
 
 func TestStreamEvents(t *testing.T) {

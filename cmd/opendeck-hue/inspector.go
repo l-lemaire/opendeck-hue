@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/llemaire/streamdeck/internal/hue"
-	"github.com/llemaire/streamdeck/internal/openaction"
+	"github.com/l-lemaire/streamdeck/internal/hue"
+	"github.com/l-lemaire/streamdeck/internal/openaction"
 )
 
 // The property inspector (plugin/propertyInspector/index.html) cannot reach

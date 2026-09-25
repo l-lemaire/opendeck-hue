@@ -8,7 +8,7 @@ import (
 	"os"
 	"text/tabwriter"
 
-	"github.com/llemaire/streamdeck/internal/hue"
+	"github.com/l-lemaire/streamdeck/internal/hue"
 )
 
 // discover implements `hue discover`. It looks for bridges with mDNS, falls

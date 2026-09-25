@@ -6,9 +6,9 @@ import (
 	"io"
 	"os"
 
-	"github.com/llemaire/streamdeck/internal/config"
-	"github.com/llemaire/streamdeck/internal/hue"
-	"github.com/llemaire/streamdeck/internal/secrets"
+	"github.com/l-lemaire/streamdeck/internal/config"
+	"github.com/l-lemaire/streamdeck/internal/hue"
+	"github.com/l-lemaire/streamdeck/internal/secrets"
 )
 
 // targetFlags are the flags every command that talks to a paired bridge

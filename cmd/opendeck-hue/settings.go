@@ -7,7 +7,7 @@ import (
 )
 
 // actionPrefix is shared by the three action UUIDs in plugin/manifest.json.
-const actionPrefix = "com.github.llemaire.hue."
+const actionPrefix = "com.github.l-lemaire.hue."
 
 // Settings is what a button remembers. The property inspector writes it
 // with setSettings; OpenDeck stores it in the profile and hands it back in
@@ -65,7 +65,7 @@ func decodeSettings(raw json.RawMessage) (Settings, error) {
 }
 
 // kindOf maps an action UUID to the entity kind it controls:
-// "com.github.llemaire.hue.toggle-light" -> "light".
+// "com.github.l-lemaire.hue.toggle-light" -> "light".
 func kindOf(actionUUID string) (string, error) {
 	name := strings.TrimPrefix(actionUUID, actionPrefix)
 	switch name {

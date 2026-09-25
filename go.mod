@@ -1,4 +1,4 @@
-module github.com/llemaire/streamdeck
+module github.com/l-lemaire/streamdeck
 
 go 1.26.8
 

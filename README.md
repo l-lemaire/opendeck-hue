@@ -9,7 +9,7 @@ running OpenDeck, no Node.js, no Python.
 
 ## What you get
 
-**OpenDeck plugin** (`com.github.llemaire.hue`)
+**OpenDeck plugin** (`com.github.l-lemaire.hue`)
 
 - Three actions: **Toggle light**, **Toggle room**, **Toggle zone**.
 - Pick the target from a dropdown filled from your bridge.
@@ -147,3 +147,7 @@ Built for Linux (x86_64, aarch64), macOS (Intel, Apple Silicon) and Windows
 (x86_64). Developed and tested on Fedora with KDE. On other platforms the
 keyring is the OS one (Keychain, Credential Manager); run `hue auth` there
 before using the plugin.
+
+## License
+
+MIT, see `LICENSE`.

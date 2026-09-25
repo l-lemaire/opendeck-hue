@@ -3,7 +3,7 @@ package hue
 import (
 	"context"
 	"errors"
-	"github.com/llemaire/streamdeck/internal/hue/huetest"
+	"github.com/l-lemaire/streamdeck/internal/hue/huetest"
 	"testing"
 	"time"
 )

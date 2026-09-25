@@ -76,7 +76,7 @@ tidy:
 
 # ---------- OpenDeck plugin ----------
 
-PLUGIN_ID   := com.github.llemaire.hue.sdPlugin
+PLUGIN_ID   := com.github.l-lemaire.hue.sdPlugin
 PLUGIN_DIR  := dist/$(PLUGIN_ID)
 PLUGIN_BIN  := opendeck-hue
 PLUGIN_PKG  := ./cmd/opendeck-hue

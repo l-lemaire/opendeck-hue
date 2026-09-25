@@ -1,7 +1,7 @@
 {
 	"Name": "Philips Hue",
 	"Description": "Toggle Philips Hue lights, rooms and zones. Pair once with the hue CLI.",
-	"Author": "llemaire",
+	"Author": "l-lemaire",
 	"Version": "0.1.0",
 	"Icon": "icons/plugin",
 	"Category": "Philips Hue",
@@ -23,7 +23,7 @@
 	],
 	"Actions": [
 		{
-			"UUID": "com.github.llemaire.hue.toggle-light",
+			"UUID": "com.github.l-lemaire.hue.toggle-light",
 			"Name": "Toggle light",
 			"Tooltip": "Switch one Hue light on or off",
 			"Icon": "icons/light",
@@ -37,7 +37,7 @@
 			]
 		},
 		{
-			"UUID": "com.github.llemaire.hue.toggle-room",
+			"UUID": "com.github.l-lemaire.hue.toggle-room",
 			"Name": "Toggle room",
 			"Tooltip": "Switch all lights of a Hue room on or off",
 			"Icon": "icons/room",
@@ -51,7 +51,7 @@
 			]
 		},
 		{
-			"UUID": "com.github.llemaire.hue.toggle-zone",
+			"UUID": "com.github.l-lemaire.hue.toggle-zone",
 			"Name": "Toggle zone",
 			"Tooltip": "Switch all lights of a Hue zone on or off",
 			"Icon": "icons/zone",

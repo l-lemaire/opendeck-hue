@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/llemaire/streamdeck/internal/config"
-	"github.com/llemaire/streamdeck/internal/hue"
-	"github.com/llemaire/streamdeck/internal/secrets"
+	"github.com/l-lemaire/streamdeck/internal/config"
+	"github.com/l-lemaire/streamdeck/internal/hue"
+	"github.com/l-lemaire/streamdeck/internal/secrets"
 )
 
 // bridgeConnector hands out a ready hue.Client for a bridge id (empty for

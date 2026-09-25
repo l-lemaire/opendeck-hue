@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"text/tabwriter"
 
-	"github.com/llemaire/streamdeck/internal/hue"
+	"github.com/l-lemaire/streamdeck/internal/hue"
 )
 
 // The control commands are verb first, then the kind of thing:

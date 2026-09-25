@@ -14,10 +14,10 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	"github.com/llemaire/streamdeck/internal/config"
-	"github.com/llemaire/streamdeck/internal/hue"
-	"github.com/llemaire/streamdeck/internal/hue/huetest"
-	"github.com/llemaire/streamdeck/internal/openaction"
+	"github.com/l-lemaire/streamdeck/internal/config"
+	"github.com/l-lemaire/streamdeck/internal/hue"
+	"github.com/l-lemaire/streamdeck/internal/hue/huetest"
+	"github.com/l-lemaire/streamdeck/internal/openaction"
 )
 
 // fakeConnector points the plugin at a huetest bridge, bypassing the config
@@ -70,7 +70,7 @@ func startPlugin(t *testing.T) (*websocket.Conn, chan map[string]any, *huetest.B
 	if testing.Verbose() {
 		debug = log.New(os.Stderr, "    debug: ", 0)
 	}
-	conn, err := openaction.Connect(ctx, openaction.Args{Port: port, PluginUUID: "com.github.llemaire.hue.sdPlugin", RegisterEvent: "registerPlugin"}, debug)
+	conn, err := openaction.Connect(ctx, openaction.Args{Port: port, PluginUUID: "com.github.l-lemaire.hue.sdPlugin", RegisterEvent: "registerPlugin"}, debug)
 	if err != nil {
 		t.Fatal(err)
 	}
