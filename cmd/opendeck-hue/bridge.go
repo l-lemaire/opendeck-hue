@@ -24,8 +24,12 @@ type bridgeConnector interface {
 	Connect(ctx context.Context, bridgeID string) (*hue.Client, config.Bridge, error)
 	// Bridges lists the known bridges for the property inspector.
 	Bridges() ([]config.Bridge, string, error)
+	// Discover finds bridges on the network, for the pairing wizard.
+	Discover(ctx context.Context) ([]hue.Bridge, error)
 	// Pair runs the pairing flow (see internal/pairing), reporting progress.
-	Pair(ctx context.Context, addr string, report func(pairing.Progress)) (config.Bridge, error)
+	// addr and id are optional: an address skips discovery, an id checks
+	// the bridge is the one the user chose.
+	Pair(ctx context.Context, addr, id string, report func(pairing.Progress)) (config.Bridge, error)
 }
 
 // fileConnector is the real implementation backed by ~/.config/hue.
@@ -52,14 +56,19 @@ func (f *fileConnector) Bridges() ([]config.Bridge, string, error) {
 	return bridges, cfg.DefaultBridge, nil
 }
 
-// Pair pairs with a bridge (found by discovery, or at addr when given) and
-// stores the key in the same credential store the CLI uses.
-func (f *fileConnector) Pair(ctx context.Context, addr string, report func(pairing.Progress)) (config.Bridge, error) {
+// Discover runs mDNS discovery with the cloud fallback.
+func (f *fileConnector) Discover(ctx context.Context) ([]hue.Bridge, error) {
+	return hue.Discovery{Log: f.log}.Discover(ctx)
+}
+
+// Pair pairs with a bridge and stores the key in the same credential store
+// the CLI uses.
+func (f *fileConnector) Pair(ctx context.Context, addr, id string, report func(pairing.Progress)) (config.Bridge, error) {
 	store, err := f.store()
 	if err != nil {
 		return config.Bridge{}, err
 	}
-	return pairing.Run(ctx, pairing.Options{Addr: addr, Store: store, Report: report, Log: f.log})
+	return pairing.Run(ctx, pairing.Options{Addr: addr, ID: id, Store: store, Report: report, Log: f.log})
 }
 
 // store opens the credential store: keyring, or the file fallback next to

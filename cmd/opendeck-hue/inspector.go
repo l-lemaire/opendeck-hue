@@ -22,7 +22,10 @@ import (
 //	                       "items":[{"id":..,"name":..,"on":..,"grouped_light":..}]}
 //	plugin -> inspector   {"event":"error","code":"not_paired"|"","message":"..."}
 //
-//	inspector -> plugin   {"event":"pair","address":"<optional host[:port]>"}
+//	inspector -> plugin   {"event":"discover"}
+//	plugin -> inspector   {"event":"bridges","items":[{"id","host","port","name","model","source"}]}
+//	                      or {"event":"bridges","items":[],"message":"<why>"}
+//	inspector -> plugin   {"event":"pair","address":"<host[:port]>","id":"<bridge id>"}
 //	plugin -> inspector   {"event":"pairing","stage":"searching|found|waiting|paired|error",
 //	                       "message":"...","seconds_left":N}
 //
@@ -33,6 +36,13 @@ type inspectorRequest struct {
 	Event   string `json:"event"`
 	Bridge  string `json:"bridge"`
 	Address string `json:"address"`
+	ID      string `json:"id"`
+}
+
+type bridgesReply struct {
+	Event   string       `json:"event"`
+	Items   []hue.Bridge `json:"items"`
+	Message string       `json:"message,omitempty"`
 }
 
 type pairingReply struct {
@@ -92,8 +102,10 @@ func (p *plugin) handleInspectorMessage(ctx context.Context, ev openaction.Event
 			return err
 		}
 		return p.conn.SendToPropertyInspector(ctx, ev.Action, ev.Context, reply)
+	case "discover":
+		return p.startDiscovery(ctx, ev)
 	case "pair":
-		return p.startPairing(ctx, ev, req.Address)
+		return p.startPairing(ctx, ev, req.Address, req.ID)
 	default:
 		return fmt.Errorf("inspector sent unknown event %q", req.Event)
 	}
@@ -151,20 +163,42 @@ func (p *plugin) listTargets(ctx context.Context, action, bridgeID string) (targ
 	return reply, nil
 }
 
+// startDiscovery looks for bridges in a goroutine (mDNS takes two seconds)
+// and sends the list to the panel.
+func (p *plugin) startDiscovery(ctx context.Context, ev openaction.Event) error {
+	go func() {
+		ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+		defer cancel()
+		bridges, err := p.bridges.Discover(ctx)
+		reply := bridgesReply{Event: "bridges", Items: bridges}
+		if reply.Items == nil {
+			reply.Items = []hue.Bridge{}
+		}
+		if err != nil {
+			reply.Message = err.Error()
+			p.info.Printf("discovery for the panel failed: %v", err)
+		} else {
+			p.info.Printf("discovery for the panel found %d bridge(s)", len(bridges))
+		}
+		p.conn.SendToPropertyInspector(ctx, ev.Action, ev.Context, reply)
+	}()
+	return nil
+}
+
 // startPairing runs the pairing flow in a goroutine, forwarding each
 // progress step to the panel. Only one pairing runs at a time.
-func (p *plugin) startPairing(ctx context.Context, ev openaction.Event, address string) error {
+func (p *plugin) startPairing(ctx context.Context, ev openaction.Event, address, id string) error {
 	if !p.inflight.begin("pairing") {
 		return p.conn.SendToPropertyInspector(ctx, ev.Action, ev.Context,
 			pairingReply{Event: "pairing", Stage: "error", Message: "A pairing is already in progress"})
 	}
-	p.info.Printf("pairing requested from the panel (address %q)", address)
+	p.info.Printf("pairing requested from the panel (address %q, id %q)", address, id)
 	go func() {
 		defer p.inflight.end("pairing")
 		ctx, cancel := context.WithTimeout(ctx, pairing.DefaultTimeout+30*time.Second)
 		defer cancel()
 
-		bridge, err := p.bridges.Pair(ctx, address, func(pr pairing.Progress) {
+		bridge, err := p.bridges.Pair(ctx, address, id, func(pr pairing.Progress) {
 			p.conn.SendToPropertyInspector(ctx, ev.Action, ev.Context,
 				pairingReply{Event: "pairing", Stage: pr.Stage, Message: pr.Message, SecondsLeft: pr.SecondsLeft})
 		})

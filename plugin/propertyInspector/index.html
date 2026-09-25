@@ -12,19 +12,55 @@
 		<script src="pi.js"></script>
 	</head>
 	<body>
-		<!-- Shown instead of the target picker while no bridge is paired. -->
+		<!--
+		  Pairing wizard, shown instead of the target picker while no bridge is
+		  paired. Three steps: find the bridge, press its button, done.
+		-->
 		<section id="pair" hidden>
-			<p class="intro">No Hue bridge is paired yet. Pairing takes a minute and is done once.</p>
-			<div class="row">
-				<label for="pair-address">Address</label>
-				<input id="pair-address" type="text" placeholder="optional, e.g. 192.168.1.42" />
+			<ol class="steps">
+				<li id="step-1" class="current">Find your bridge</li>
+				<li id="step-2">Press the button</li>
+				<li id="step-3">Done</li>
+			</ol>
+
+			<!-- Step 1: discovery result, a choice, or a manual address. -->
+			<div id="pair-find">
+				<p id="find-status" class="status busy">Searching your network for a Hue bridge…</p>
+				<div id="bridge-list" class="choices"></div>
+				<div class="row" id="manual-row" hidden>
+					<label for="pair-address">Address</label>
+					<input id="pair-address" type="text" placeholder="e.g. 192.168.1.42" />
+				</div>
+				<div class="actions">
+					<button id="pair-button" type="button" disabled>Continue</button>
+					<button id="search-again" type="button" class="link">Search again</button>
+				</div>
 			</div>
-			<div class="row">
-				<label></label>
-				<button id="pair-button" type="button">Pair with bridge</button>
+
+			<!-- Step 2: the physical button, with a countdown. -->
+			<div id="pair-press" hidden>
+				<div class="bridge-art">
+					<svg viewBox="0 0 160 110" aria-hidden="true">
+						<rect x="10" y="20" width="140" height="80" rx="14" fill="#f4f4f4" stroke="#c9c9c9" stroke-width="2"/>
+						<circle id="art-button" cx="80" cy="60" r="18" fill="#e3e3e3" stroke="#bdbdbd" stroke-width="2"/>
+						<circle cx="80" cy="60" r="26" fill="none" stroke="#f7821b" stroke-width="3" class="pulse-ring"/>
+						<circle cx="40" cy="36" r="3" fill="#3fa9f5"/>
+						<circle cx="52" cy="36" r="3" fill="#3fa9f5"/>
+						<circle cx="64" cy="36" r="3" fill="#3fa9f5"/>
+					</svg>
+				</div>
+				<p class="instruction" id="press-instruction">Connecting to the bridge…</p>
+				<p id="pair-countdown" class="countdown" hidden></p>
+				<p id="press-status" class="status busy"></p>
 			</div>
-			<p id="pair-status" class="status"></p>
-			<p id="pair-countdown" class="countdown" hidden></p>
+
+			<!-- Step 3 / errors. -->
+			<div id="pair-result" hidden>
+				<p id="result-status" class="status"></p>
+				<div class="actions">
+					<button id="retry-button" type="button">Try again</button>
+				</div>
+			</div>
 		</section>
 
 		<section id="configure">

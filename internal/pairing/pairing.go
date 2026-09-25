@@ -97,7 +97,11 @@ func Run(ctx context.Context, o Options) (config.Bridge, error) {
 	}
 
 	// Step 1: decide which bridge to talk to.
-	report(Progress{Stage: StageSearching, Message: "Looking for a bridge on the network…"})
+	if o.Addr != "" {
+		report(Progress{Stage: StageSearching, Message: "Connecting to the bridge at " + o.Addr + "…"})
+	} else {
+		report(Progress{Stage: StageSearching, Message: "Looking for a bridge on the network…"})
+	}
 	addr, expectedID, name, model, err := pickBridge(ctx, o)
 	if err != nil {
 		return config.Bridge{}, err

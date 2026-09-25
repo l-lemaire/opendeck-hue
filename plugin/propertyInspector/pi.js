@@ -77,6 +77,10 @@ function onPluginMessage(payload) {
 		onPairingProgress(payload);
 		return;
 	}
+	if (payload.event === "bridges") {
+		onBridgesFound(payload);
+		return;
+	}
 	if (payload.event === "error") {
 		if (payload.code === "not_paired") {
 			showPairing(true);
@@ -162,50 +166,154 @@ function setStatus(text, state) {
 	el.className = "status" + (state ? " " + state : "");
 }
 
-// ---- Pairing from the panel ----
-// The plugin runs the same flow as `hue auth` and reports each stage.
+// ---- Pairing wizard ----
+// Shown while no bridge is paired. Discovery starts by itself; the user
+// picks a bridge (or types an address), then is told when to press the
+// button on the bridge. The plugin does the work and reports each stage.
+
+let wizardStarted = false;
+let discovered = []; // bridges from the last discovery
 
 function showPairing(show) {
 	$("pair").hidden = !show;
 	$("configure").hidden = show;
+	if (show && !wizardStarted) {
+		wizardStarted = true;
+		$("pair-button").addEventListener("click", onContinue);
+		$("search-again").addEventListener("click", startDiscovery);
+		$("retry-button").addEventListener("click", startDiscovery);
+		$("pair-address").addEventListener("input", () => { $("pair-button").disabled = !$("pair-address").value.trim(); });
+		startDiscovery();
+	}
 }
 
-function startPairing() {
+function setStep(n) {
+	for (let i = 1; i <= 3; i++) {
+		const li = $("step-" + i);
+		li.className = i < n ? "done" : i === n ? "current" : "";
+	}
+	$("pair-find").hidden = n !== 1;
+	$("pair-press").hidden = n !== 2;
+	$("pair-result").hidden = n !== 3;
+}
+
+function startDiscovery() {
+	setStep(1);
+	$("bridge-list").innerHTML = "";
+	$("manual-row").hidden = true;
 	$("pair-button").disabled = true;
+	setStatusOn("find-status", "Searching your network for a Hue bridge…", "busy");
+	sendToPlugin({ event: "discover" });
+}
+
+function onBridgesFound(payload) {
+	discovered = payload.items || [];
+	const list = $("bridge-list");
+	list.innerHTML = "";
+
+	if (discovered.length === 0) {
+		setStatusOn("find-status", payload.message
+			? "No bridge found: " + payload.message
+			: "No bridge found on your network. Enter its address below (the Hue app shows it under Settings > My Hue system).", "error");
+	} else {
+		setStatusOn("find-status", discovered.length === 1
+			? "Found your bridge. Continue to pair with it."
+			: "Found " + discovered.length + " bridges. Choose yours.", "ok");
+	}
+
+	discovered.forEach((b, i) => list.appendChild(choice("bridge", String(i),
+		b.name || "Hue bridge", b.host + "  ·  " + b.id.slice(-6).toUpperCase(), i === 0)));
+	list.appendChild(choice("manual", "manual", "Enter the address manually", "", discovered.length === 0));
+
+	onChoiceChanged();
+	for (const input of list.querySelectorAll("input")) input.addEventListener("change", onChoiceChanged);
+}
+
+// choice builds one radio row.
+function choice(kind, value, name, detail, checked) {
+	const label = document.createElement("label");
+	label.className = "choice";
+	const input = document.createElement("input");
+	input.type = "radio";
+	input.name = "bridge-choice";
+	input.value = kind + ":" + value;
+	input.checked = checked;
+	label.appendChild(input);
+	const n = document.createElement("span");
+	n.className = "name";
+	n.textContent = name;
+	label.appendChild(n);
+	if (detail) {
+		const d = document.createElement("span");
+		d.className = "detail";
+		d.textContent = detail;
+		label.appendChild(d);
+	}
+	return label;
+}
+
+function selectedChoice() {
+	const input = document.querySelector('input[name="bridge-choice"]:checked');
+	return input ? input.value : "";
+}
+
+function onChoiceChanged() {
+	const manual = selectedChoice() === "manual:manual";
+	$("manual-row").hidden = !manual;
+	$("pair-button").disabled = manual ? !$("pair-address").value.trim() : !selectedChoice();
+	if (manual) $("pair-address").focus();
+}
+
+function onContinue() {
+	const sel = selectedChoice();
+	let address = "", id = "";
+	if (sel === "manual:manual") {
+		address = $("pair-address").value.trim();
+		if (!address) return;
+	} else {
+		const b = discovered[Number(sel.split(":")[1])];
+		if (!b) return;
+		address = b.host + ":" + (b.port || 443);
+		id = b.id;
+	}
+	setStep(2);
 	$("pair-countdown").hidden = true;
-	setPairStatus("Starting…", "busy");
-	sendToPlugin({ event: "pair", address: $("pair-address").value.trim() });
+	$("press-instruction").textContent = "Connecting to the bridge…";
+	setStatusOn("press-status", "", "busy");
+	sendToPlugin({ event: "pair", address: address, id: id });
 }
 
 function onPairingProgress(payload) {
-	const countdown = $("pair-countdown");
 	switch (payload.stage) {
 		case "searching":
 		case "found":
-			setPairStatus(payload.message, "busy");
+			setStep(2);
+			$("press-instruction").textContent = payload.message;
 			break;
 		case "waiting":
-			setPairStatus(payload.message, "busy");
-			countdown.hidden = false;
-			countdown.textContent = payload.seconds_left + " s";
+			setStep(2);
+			$("press-instruction").textContent = "Press the round button on top of your Hue bridge now";
+			$("pair-countdown").hidden = false;
+			$("pair-countdown").textContent = payload.seconds_left + " s";
+			setStatusOn("press-status", "Waiting for the button…", "busy");
 			break;
 		case "paired":
-			countdown.hidden = true;
-			setPairStatus(payload.message, "ok");
-			$("pair-button").disabled = false;
-			// Switch to the normal view and load the targets.
-			setTimeout(requestTargets, 800);
+			setStep(3);
+			setStatusOn("result-status", payload.message + " Loading your lights…", "ok");
+			$("retry-button").hidden = true;
+			setTimeout(requestTargets, 1200);
 			break;
 		case "error":
-			countdown.hidden = true;
-			setPairStatus(payload.message, "error");
-			$("pair-button").disabled = false;
+			setStep(3);
+			$("step-3").textContent = "Not paired";
+			setStatusOn("result-status", payload.message, "error");
+			$("retry-button").hidden = false;
 			break;
 	}
 }
 
-function setPairStatus(text, state) {
-	const el = $("pair-status");
+function setStatusOn(id, text, state) {
+	const el = $(id);
 	el.textContent = text;
 	el.className = "status" + (state ? " " + state : "");
 }

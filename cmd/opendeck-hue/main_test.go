@@ -28,9 +28,10 @@ type fakeConnector struct {
 	fb     *huetest.Bridge
 	client *hue.Client
 
-	unpaired   bool  // Bridges() returns nothing until Pair succeeds
-	pairErr    error // Pair fails with this when set
-	pairedWith string
+	unpaired    bool  // Bridges() returns nothing until Pair succeeds
+	pairErr     error // Pair fails with this when set
+	discoverErr error
+	pairedWith  string
 }
 
 func (f *fakeConnector) Connect(ctx context.Context, id string) (*hue.Client, config.Bridge, error) {
@@ -46,8 +47,15 @@ func (f *fakeConnector) Bridges() ([]config.Bridge, string, error) {
 
 // Pair simulates the flow: a few progress steps, then success (and the
 // connector becomes "paired") or the configured error.
-func (f *fakeConnector) Pair(ctx context.Context, addr string, report func(pairing.Progress)) (config.Bridge, error) {
-	f.pairedWith = addr
+func (f *fakeConnector) Discover(ctx context.Context) ([]hue.Bridge, error) {
+	if f.discoverErr != nil {
+		return nil, f.discoverErr
+	}
+	return []hue.Bridge{{ID: f.fb.ID, Host: "10.0.0.5", Port: 443, Name: "Fake Bridge", Model: "BSB002", Source: "mdns"}}, nil
+}
+
+func (f *fakeConnector) Pair(ctx context.Context, addr, id string, report func(pairing.Progress)) (config.Bridge, error) {
+	f.pairedWith = addr + "|" + id
 	report(pairing.Progress{Stage: pairing.StageSearching, Message: "Looking"})
 	if f.pairErr != nil {
 		return config.Bridge{}, f.pairErr
@@ -423,7 +431,7 @@ func TestPairFromInspector(t *testing.T) {
 	host, sent, _, connector := startPluginWith(t, &fakeConnector{unpaired: true})
 	push(t, host, map[string]any{
 		"event": "sendToPlugin", "action": actionPrefix + "toggle-light", "context": "ctx-p2",
-		"payload": map[string]any{"event": "pair", "address": "10.0.0.5"},
+		"payload": map[string]any{"event": "pair", "address": "10.0.0.5:443", "id": "001788fffe000001"},
 	})
 	var stages []string
 	for len(stages) < 4 {
@@ -440,7 +448,7 @@ func TestPairFromInspector(t *testing.T) {
 	if stages[0] != "searching" || stages[3] != "paired" {
 		t.Errorf("stages = %v", stages)
 	}
-	if connector.pairedWith != "10.0.0.5" {
+	if connector.pairedWith != "10.0.0.5:443|001788fffe000001" {
 		t.Errorf("address passed = %q", connector.pairedWith)
 	}
 	// The panel now lists targets normally.
@@ -462,6 +470,30 @@ func TestPairFailureReachesInspector(t *testing.T) {
 	expectEvent(t, sent, "sendToPropertyInspector") // searching
 	payload := expectEvent(t, sent, "sendToPropertyInspector")["payload"].(map[string]any)
 	if payload["stage"] != "error" || !strings.Contains(payload["message"].(string), "link button") {
+		t.Errorf("payload = %v", payload)
+	}
+}
+
+func TestDiscoverFromInspector(t *testing.T) {
+	host, sent, _, _ := startPluginWith(t, &fakeConnector{unpaired: true})
+	push(t, host, map[string]any{
+		"event": "sendToPlugin", "action": actionPrefix + "toggle-light", "context": "ctx-d1",
+		"payload": map[string]any{"event": "discover"},
+	})
+	payload := expectEvent(t, sent, "sendToPropertyInspector")["payload"].(map[string]any)
+	items := payload["items"].([]any)
+	if payload["event"] != "bridges" || len(items) != 1 || items[0].(map[string]any)["host"] != "10.0.0.5" {
+		t.Errorf("payload = %v", payload)
+	}
+
+	// Discovery failure: empty list plus a message, not a crash.
+	host2, sent2, _, _ := startPluginWith(t, &fakeConnector{unpaired: true, discoverErr: errors.New("network down")})
+	push(t, host2, map[string]any{
+		"event": "sendToPlugin", "action": actionPrefix + "toggle-light", "context": "ctx-d2",
+		"payload": map[string]any{"event": "discover"},
+	})
+	payload = expectEvent(t, sent2, "sendToPropertyInspector")["payload"].(map[string]any)
+	if len(payload["items"].([]any)) != 0 || payload["message"] != "network down" {
 		t.Errorf("payload = %v", payload)
 	}
 }
