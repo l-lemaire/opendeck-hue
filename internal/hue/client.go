@@ -25,7 +25,7 @@ type Client struct {
 
 // ClientOptions is everything NewClient needs. Only Addr is mandatory.
 type ClientOptions struct {
-	// Addr is "host:port", e.g. "10.0.10.57:443".
+	// Addr is "host:port", e.g. "192.168.1.42:443".
 	Addr string
 	// ID is the lower-case bridge id the certificate must match. Leave empty
 	// only for the pre-pairing probe when the id is not known yet.
