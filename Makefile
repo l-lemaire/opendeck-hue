@@ -5,7 +5,9 @@
 #   make run        build and run the CLI, e.g. make run ARGS="lights list"
 #   make test       run all unit tests
 #   make check      gofmt + go vet + tests (run before committing)
-#   make cross      build hue for every OpenDeck target triple into ./dist/
+#   make cross      build hue for every OpenDeck target triple into ./dist/cli/
+#   make plugin-install   build the OpenDeck plugin and copy it into OpenDeck
+#   make plugin-release   cross-compile the plugin and zip it for distribution
 #   make clean      remove build outputs
 
 # ---------- settings ----------
@@ -19,6 +21,12 @@ PKG      := ./cmd/hue
 # declared in cmd/hue/main.go.
 VERSION  ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS  := -s -w -X main.version=$(VERSION)
+
+# The plugin manifest needs a plain semantic version ("1.2.3"). Use the
+# exact tag when HEAD is on one (v1.2.3 -> 1.2.3), otherwise 0.0.0 so a
+# development build is recognisable as such.
+SEMVER   := $(shell git describe --tags --exact-match 2>/dev/null | sed -E 's/^v//; /^[0-9]+\.[0-9]+\.[0-9]+$$/!d')
+SEMVER   := $(if $(SEMVER),$(SEMVER),0.0.0)
 
 # CGO_ENABLED=0 produces a fully static binary with no C dependencies.
 # That is what lets the plugin run on a machine with nothing installed.
@@ -74,7 +82,7 @@ PLUGIN_BIN  := opendeck-hue
 PLUGIN_PKG  := ./cmd/opendeck-hue
 OPENDECK_PLUGINS := $(HOME)/.config/opendeck/plugins
 
-.PHONY: plugin plugin-install plugin-uninstall opendeck-restart plugin-log
+.PHONY: plugin plugin-install plugin-uninstall opendeck-restart plugin-log plugin-release
 
 # Assemble the plugin folder for this machine (Linux x86_64) under dist/:
 # the manifest, icons and property inspector from plugin/, plus the binary
@@ -106,22 +114,44 @@ opendeck-restart:
 	setsid -f opendeck >/dev/null 2>&1
 	@echo "OpenDeck restarted; see: make plugin-log"
 
+# Release: the plugin folder with binaries for every platform, the
+# manifest stamped with the version, zipped. OpenDeck installs the zip from
+# Settings > Plugins; the .streamDeckPlugin extension is the convention the
+# Stream Deck ecosystem uses for exactly this kind of zip.
+RELEASE := dist/opendeck-hue-$(SEMVER).streamDeckPlugin
+
+.PHONY: plugin-release
+plugin-release:
+	rm -rf $(PLUGIN_DIR) $(RELEASE)
+	mkdir -p $(PLUGIN_DIR)
+	cp -r plugin/. $(PLUGIN_DIR)/
+	sed -i -E 's/"Version": "[^"]*"/"Version": "$(SEMVER)"/' $(PLUGIN_DIR)/manifest.json
+	$(call cross-build,$(PLUGIN_PKG),$(PLUGIN_BIN),$(PLUGIN_DIR))
+	cd dist && zip -qr $(notdir $(RELEASE)) $(PLUGIN_ID)
+	@echo "release: $(RELEASE) (version $(SEMVER))"
+
 # Follow both logs: OpenDeck's own and the plugin's.
 plugin-log:
 	tail -n 20 -f $(HOME)/.local/share/opendeck/logs/opendeck.log $${XDG_STATE_HOME:-$(HOME)/.local/state}/opendeck-hue/plugin.log
 
 # ---------- cross-compilation ----------
 
-# Builds one binary per target into dist/<triple>/bin/<name>[.exe], matching
-# the directory layout OpenDeck expects inside a .sdPlugin folder.
-cross:
+# cross-build builds one package for every target into
+# <outdir>/<triple>/bin/<name>[.exe], the layout OpenDeck expects inside a
+# .sdPlugin folder. Usage: $(call cross-build,<package>,<name>,<outdir>)
+define cross-build
 	@for t in $(TARGETS); do \
 		triple=$${t%%:*}; rest=$${t#*:}; goos=$${rest%%:*}; goarch=$${rest#*:}; \
 		ext=""; [ "$$goos" = "windows" ] && ext=".exe"; \
-		out=dist/$$triple/bin/$(BIN)$$ext; \
+		out=$(3)/$$triple/bin/$(2)$$ext; \
 		echo "  $$goos/$$goarch -> $$out"; \
-		GOOS=$$goos GOARCH=$$goarch go build -trimpath -ldflags '$(LDFLAGS)' -o $$out $(PKG) || exit 1; \
+		GOOS=$$goos GOARCH=$$goarch go build -trimpath -ldflags '$(LDFLAGS)' -o $$out $(1) || exit 1; \
 	done
+endef
+
+# The CLI for every platform, under dist/cli/.
+cross:
+	$(call cross-build,$(PKG),$(BIN),dist/cli)
 
 clean:
 	rm -rf bin dist coverage.out
