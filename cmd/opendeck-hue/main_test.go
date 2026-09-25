@@ -14,10 +14,10 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	"github.com/l-lemaire/streamdeck/internal/config"
-	"github.com/l-lemaire/streamdeck/internal/hue"
-	"github.com/l-lemaire/streamdeck/internal/hue/huetest"
-	"github.com/l-lemaire/streamdeck/internal/openaction"
+	"github.com/l-lemaire/opendeck-hue/internal/config"
+	"github.com/l-lemaire/opendeck-hue/internal/hue"
+	"github.com/l-lemaire/opendeck-hue/internal/hue/huetest"
+	"github.com/l-lemaire/opendeck-hue/internal/openaction"
 )
 
 // fakeConnector points the plugin at a huetest bridge, bypassing the config

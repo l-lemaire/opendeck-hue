@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/l-lemaire/streamdeck/internal/hue"
+	"github.com/l-lemaire/opendeck-hue/internal/hue"
 )
 
 // watch implements `hue watch`: print every change the bridge reports until

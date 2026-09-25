@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/l-lemaire/streamdeck/internal/config"
+	"github.com/l-lemaire/opendeck-hue/internal/config"
 )
 
 // pluginID is the OpenDeck plugin directory name, shared with plugin/manifest.json

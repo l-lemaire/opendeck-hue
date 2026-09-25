@@ -13,9 +13,9 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/l-lemaire/streamdeck/internal/config"
-	"github.com/l-lemaire/streamdeck/internal/hue"
-	"github.com/l-lemaire/streamdeck/internal/secrets"
+	"github.com/l-lemaire/opendeck-hue/internal/config"
+	"github.com/l-lemaire/opendeck-hue/internal/hue"
+	"github.com/l-lemaire/opendeck-hue/internal/secrets"
 )
 
 // appName is the first half of the "devicetype" the bridge records for our

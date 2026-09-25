@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/l-lemaire/streamdeck/internal/hue"
-	"github.com/l-lemaire/streamdeck/internal/openaction"
+	"github.com/l-lemaire/opendeck-hue/internal/hue"
+	"github.com/l-lemaire/opendeck-hue/internal/openaction"
 )
 
 // bridgeTimeout caps one round trip to the bridge for a key press or a

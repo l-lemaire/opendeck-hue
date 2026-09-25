@@ -1,4 +1,4 @@
-module github.com/l-lemaire/streamdeck
+module github.com/l-lemaire/opendeck-hue
 
 go 1.26.8
 

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/l-lemaire/streamdeck/internal/secrets"
+	"github.com/l-lemaire/opendeck-hue/internal/secrets"
 )
 
 // Credentials are stored as one JSON blob per bridge in the secret store,

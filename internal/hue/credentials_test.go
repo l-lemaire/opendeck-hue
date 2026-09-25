@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/l-lemaire/streamdeck/internal/secrets"
+	"github.com/l-lemaire/opendeck-hue/internal/secrets"
 )
 
 // memStore is a throwaway in-memory Store for tests.

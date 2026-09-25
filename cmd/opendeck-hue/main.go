@@ -19,8 +19,8 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/l-lemaire/streamdeck/internal/config"
-	"github.com/l-lemaire/streamdeck/internal/openaction"
+	"github.com/l-lemaire/opendeck-hue/internal/config"
+	"github.com/l-lemaire/opendeck-hue/internal/openaction"
 )
 
 var version = "dev"
