@@ -24,8 +24,11 @@
 		</div>
 		<div class="row">
 			<label></label>
-			<button id="refresh" type="button">Refresh list</button>
+			<button id="refresh" type="button" title="Ask the bridge again">
+				<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2v3h-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+				Refresh
+			</button>
 		</div>
-		<p id="status" class="status"></p>
+		<p id="status" class="status busy">Connecting…</p>
 	</body>
 </html>

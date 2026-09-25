@@ -34,7 +34,7 @@ function connectOpenActionSocket(port, uuid, registerEvent, info, inActionInfo) 
 			settings = (data.payload && data.payload.settings) || {};
 		}
 	};
-	websocket.onclose = () => setStatus("Disconnected from OpenDeck", true);
+	websocket.onclose = () => setStatus("Disconnected from OpenDeck", "error");
 
 	$("target-label").textContent = kindLabel();
 	$("refresh").addEventListener("click", requestTargets);
@@ -63,14 +63,14 @@ function sendToPlugin(payload) {
 }
 
 function requestTargets() {
-	setStatus("Loading from the bridge…");
+	setStatus("Loading from the bridge…", "busy");
 	$("target").disabled = true;
 	sendToPlugin({ event: "listTargets", bridge: settings.bridge || "" });
 }
 
 function onPluginMessage(payload) {
 	if (payload.event === "error") {
-		setStatus(payload.message, true);
+		setStatus(payload.message, "error");
 		$("target").innerHTML = '<option value="">Unavailable</option>';
 		return;
 	}
@@ -104,7 +104,7 @@ function onPluginMessage(payload) {
 		select.appendChild(opt);
 	}
 	select.disabled = false;
-	setStatus(payload.items.length + " " + payload.kind + (payload.items.length === 1 ? "" : "s") + " found");
+	setStatus(payload.items.length + " " + payload.kind + (payload.items.length === 1 ? "" : "s") + " found", "ok");
 }
 
 function onTargetChosen() {
@@ -119,11 +119,13 @@ function onTargetChosen() {
 		name: opt.textContent.replace(/\s+\((on|off)\)$/, ""),
 	};
 	websocket.send(JSON.stringify({ event: "setSettings", context: actionInfo.context, payload: settings }));
-	setStatus("Saved: " + settings.name);
+	setStatus("Saved: " + settings.name, "ok");
 }
 
-function setStatus(text, isError) {
+// setStatus shows a message with a coloured dot: state is "busy", "ok",
+// "error" or undefined for neutral.
+function setStatus(text, state) {
 	const el = $("status");
 	el.textContent = text;
-	el.className = "status" + (isError ? " error" : "");
+	el.className = "status" + (state ? " " + state : "");
 }

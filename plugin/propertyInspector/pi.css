@@ -1,36 +1,127 @@
-/* Minimal styling that follows the host's dark theme. */
+/*
+ * Property inspector styling, matched to OpenDeck's panel: dark greys with
+ * the host's orange highlight. Colours come from the host's own palette
+ * (see the -info argument OpenDeck passes: highlightColor #F7821B).
+ */
+:root {
+	--bg: #2d2d2d;
+	--field: #3d3d3d;
+	--field-hover: #474747;
+	--border: #4a4a4a;
+	--text: #e4e4e4;
+	--muted: #9a9a9a;
+	--accent: #f7821b;
+	--ok: #5cc46a;
+	--error: #f0705a;
+	--radius: 6px;
+}
+
+* { box-sizing: border-box; }
+
 body {
 	margin: 0;
-	padding: 8px;
-	font: 13px ui-sans-serif, system-ui, sans-serif;
-	color: #d8d8d8;
-	background: transparent;
+	padding: 10px 12px;
+	font: 13px/1.4 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+	-webkit-font-smoothing: antialiased;
+	color: var(--text);
+	background: var(--bg);
 }
+
 .row {
+	display: grid;
+	grid-template-columns: 76px 1fr;
+	align-items: center;
+	gap: 10px;
+	margin-bottom: 10px;
+}
+
+label {
+	text-align: right;
+	font-weight: 600;
+	color: var(--muted);
+	white-space: nowrap;
+}
+
+/* Native select, restyled: no system chrome, our own chevron. */
+select {
+	appearance: none;
+	-webkit-appearance: none;
+	width: 100%;
+	padding: 7px 32px 7px 10px;
+	color: var(--text);
+	background-color: var(--field);
+	background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1.5 6 6.5 11 1.5' fill='none' stroke='%239a9a9a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+	background-repeat: no-repeat;
+	background-position: right 10px center;
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	font: inherit;
+	cursor: pointer;
+	transition: background-color 120ms, border-color 120ms, box-shadow 120ms;
+}
+select:hover { background-color: var(--field-hover); }
+select:focus {
+	outline: none;
+	border-color: var(--accent);
+	box-shadow: 0 0 0 2px rgba(247, 130, 27, 0.35);
+}
+select:disabled {
+	color: var(--muted);
+	cursor: default;
+	opacity: 0.7;
+}
+option { background: var(--field); color: var(--text); }
+
+button {
+	justify-self: start;
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 12px;
+	color: var(--text);
+	background: var(--field);
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	font: inherit;
+	font-weight: 600;
+	cursor: pointer;
+	transition: background-color 120ms, border-color 120ms;
+}
+button:hover { background: var(--field-hover); border-color: #5a5a5a; }
+button:active { background: #303030; }
+button:focus-visible {
+	outline: none;
+	border-color: var(--accent);
+	box-shadow: 0 0 0 2px rgba(247, 130, 27, 0.35);
+}
+button svg { width: 14px; height: 14px; }
+
+/* Status line: a coloured dot and a short message. */
+.status {
 	display: flex;
 	align-items: center;
 	gap: 8px;
-	margin-bottom: 8px;
+	margin: 2px 0 0 86px;
+	min-height: 1.4em;
+	color: var(--muted);
 }
-label {
-	flex: 0 0 72px;
-	text-align: right;
-	color: #9a9a9a;
+.status::before {
+	content: "";
+	flex: none;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--muted);
+	transition: background-color 120ms;
 }
-select, button {
-	flex: 1;
-	min-width: 0;
-	padding: 4px 6px;
-	color: #e6e6e6;
-	background: #2d2d2d;
-	border: 1px solid #3d3d3d;
-	border-radius: 4px;
-	font: inherit;
+.status.ok::before { background: var(--ok); }
+.status.error { color: var(--error); }
+.status.error::before { background: var(--error); }
+.status.busy::before {
+	background: var(--accent);
+	animation: pulse 1s ease-in-out infinite;
 }
-button {
-	flex: 0 0 auto;
-	cursor: pointer;
+@keyframes pulse {
+	0%, 100% { opacity: 1; }
+	50% { opacity: 0.3; }
 }
-button:hover { background: #383838; }
-.status { margin: 4px 0 0 80px; color: #9a9a9a; min-height: 1.2em; }
-.status.error { color: #f0705a; }
