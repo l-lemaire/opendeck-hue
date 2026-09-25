@@ -36,9 +36,9 @@ func (f *fakeConnector) Bridges() ([]config.Bridge, string, error) {
 }
 
 // startPlugin wires a plugin to a fake host and a fake bridge and runs its
-// event loop. It returns the host side of the WebSocket and a channel of
-// decoded messages the plugin sent.
-func startPlugin(t *testing.T) (*websocket.Conn, chan map[string]any) {
+// event loop. It returns the host side of the WebSocket, a channel of
+// decoded messages the plugin sent, and the fake bridge.
+func startPlugin(t *testing.T) (*websocket.Conn, chan map[string]any, *huetest.Bridge) {
 	t.Helper()
 	fb := huetest.New(t, "001788fffe000001")
 	client := hue.NewClient(hue.ClientOptions{Addr: fb.Addr(), ID: fb.ID, Fingerprint: fb.Fingerprint, AppKey: fb.AppKey})
@@ -81,7 +81,22 @@ func startPlugin(t *testing.T) (*websocket.Conn, chan map[string]any) {
 	if reg := next(t, sent); reg["event"] != "registerPlugin" {
 		t.Fatalf("first message = %v", reg)
 	}
-	return host, sent
+	return host, sent, fb
+}
+
+// expect pulls messages until one with the given event arrives, failing on
+// anything else. Goroutines make the order of setTitle/setState non-fixed.
+func expectEvent(t *testing.T, ch chan map[string]any, event string) map[string]any {
+	t.Helper()
+	m := next(t, ch)
+	if m["event"] != event {
+		t.Fatalf("got %v, want event %q", m, event)
+	}
+	return m
+}
+
+func stateOf(m map[string]any) int {
+	return int(m["payload"].(map[string]any)["state"].(float64))
 }
 
 func next(t *testing.T, ch chan map[string]any) map[string]any {
@@ -104,7 +119,7 @@ func push(t *testing.T, host *websocket.Conn, v any) {
 }
 
 func TestInspectorListsLights(t *testing.T) {
-	host, sent := startPlugin(t)
+	host, sent, _ := startPlugin(t)
 	push(t, host, map[string]any{
 		"event": "sendToPlugin", "action": actionPrefix + "toggle-light", "context": "ctx-1",
 		"payload": map[string]any{"event": "listTargets", "bridge": ""},
@@ -131,7 +146,7 @@ func TestInspectorListsLights(t *testing.T) {
 }
 
 func TestInspectorListsZonesWithGroupedLight(t *testing.T) {
-	host, sent := startPlugin(t)
+	host, sent, _ := startPlugin(t)
 	push(t, host, map[string]any{
 		"event": "sendToPlugin", "action": actionPrefix + "toggle-zone", "context": "ctx-2",
 		"payload": map[string]any{"event": "listTargets"},
@@ -148,7 +163,7 @@ func TestInspectorListsZonesWithGroupedLight(t *testing.T) {
 }
 
 func TestInspectorErrors(t *testing.T) {
-	host, sent := startPlugin(t)
+	host, sent, _ := startPlugin(t)
 	// Unknown action -> error reply to the inspector.
 	push(t, host, map[string]any{
 		"event": "sendToPlugin", "action": actionPrefix + "dimmer", "context": "ctx-3",
@@ -160,15 +175,99 @@ func TestInspectorErrors(t *testing.T) {
 	}
 }
 
-func TestWillAppearSetsTitleFromSettings(t *testing.T) {
-	host, sent := startPlugin(t)
+func TestWillAppearSetsTitleAndState(t *testing.T) {
+	host, sent, _ := startPlugin(t)
 	push(t, host, map[string]any{
 		"event": "willAppear", "action": actionPrefix + "toggle-light", "context": "ctx-4",
 		"payload": map[string]any{"settings": map[string]any{"target": huetest.LightKitchen, "name": "Kitchen"}, "controller": "Keypad"},
 	})
-	m := next(t, sent)
-	if m["event"] != "setTitle" || m["payload"].(map[string]any)["title"] != "Kitchen" {
-		t.Errorf("got %v, want setTitle Kitchen", m)
+	title := expectEvent(t, sent, "setTitle")
+	if title["payload"].(map[string]any)["title"] != "Kitchen" {
+		t.Errorf("title = %v", title)
+	}
+	// Kitchen is on in the fake bridge, so the refreshed state is 1.
+	if st := expectEvent(t, sent, "setState"); stateOf(st) != stateOn {
+		t.Errorf("state = %v, want on", st)
+	}
+}
+
+func TestWillAppearWithoutTargetDoesNothing(t *testing.T) {
+	host, sent, _ := startPlugin(t)
+	push(t, host, map[string]any{
+		"event": "willAppear", "action": actionPrefix + "toggle-light", "context": "ctx-5",
+		"payload": map[string]any{"settings": map[string]any{}, "controller": "Keypad"},
+	})
+	select {
+	case m := <-sent:
+		t.Fatalf("unexpected message %v", m)
+	case <-time.After(300 * time.Millisecond):
+	}
+}
+
+func keyDown(action, context string, settings map[string]any) map[string]any {
+	return map[string]any{
+		"event": "keyDown", "action": actionPrefix + action, "context": context,
+		"payload": map[string]any{"settings": settings, "state": 0},
+	}
+}
+
+func TestKeyDownTogglesLight(t *testing.T) {
+	host, sent, fb := startPlugin(t)
+	settings := map[string]any{"target": huetest.LightKitchen, "name": "Kitchen", "kind": "light"}
+
+	push(t, host, keyDown("toggle-light", "ctx-6", settings)) // on -> off
+	if st := expectEvent(t, sent, "setState"); stateOf(st) != stateOff {
+		t.Errorf("after first press state = %v, want off", st)
+	}
+	push(t, host, keyDown("toggle-light", "ctx-6", settings)) // off -> on
+	if st := expectEvent(t, sent, "setState"); stateOf(st) != stateOn {
+		t.Errorf("after second press state = %v, want on", st)
+	}
+	if puts := fb.Puts(); len(puts) != 2 || puts[0] != "light/"+huetest.LightKitchen {
+		t.Errorf("bridge PUTs = %v", puts)
+	}
+}
+
+func TestKeyDownTogglesZoneViaGroupedLight(t *testing.T) {
+	host, sent, fb := startPlugin(t)
+	// Settings written by the inspector carry grouped_light; no lookup needed.
+	push(t, host, keyDown("toggle-zone", "ctx-7", map[string]any{
+		"target": huetest.ZoneOffice, "grouped_light": huetest.GroupedOffice, "name": "Office", "kind": "zone",
+	}))
+	if st := expectEvent(t, sent, "setState"); stateOf(st) != stateOn { // office was off
+		t.Errorf("state = %v, want on", st)
+	}
+	if puts := fb.Puts(); len(puts) != 1 || puts[0] != "grouped_light/"+huetest.GroupedOffice {
+		t.Errorf("bridge PUTs = %v", puts)
+	}
+}
+
+func TestKeyDownRoomWithoutGroupedLightLooksItUp(t *testing.T) {
+	host, sent, fb := startPlugin(t)
+	push(t, host, keyDown("toggle-room", "ctx-8", map[string]any{"target": huetest.RoomKitchen, "name": "Kitchen"}))
+	if st := expectEvent(t, sent, "setState"); stateOf(st) != stateOff { // kitchen room was on
+		t.Errorf("state = %v, want off", st)
+	}
+	if puts := fb.Puts(); len(puts) != 1 || puts[0] != "grouped_light/"+huetest.GroupedKitchen {
+		t.Errorf("bridge PUTs = %v", puts)
+	}
+}
+
+func TestKeyDownWithoutTargetAlerts(t *testing.T) {
+	host, sent, fb := startPlugin(t)
+	push(t, host, keyDown("toggle-light", "ctx-9", map[string]any{}))
+	expectEvent(t, sent, "showAlert")
+	if len(fb.Puts()) != 0 {
+		t.Error("bridge was written to")
+	}
+}
+
+func TestKeyDownOnMissingLightAlerts(t *testing.T) {
+	host, sent, fb := startPlugin(t)
+	push(t, host, keyDown("toggle-light", "ctx-10", map[string]any{"target": "gone-gone-gone", "name": "Old"}))
+	expectEvent(t, sent, "showAlert")
+	if len(fb.Puts()) != 0 {
+		t.Error("bridge was written to")
 	}
 }
 

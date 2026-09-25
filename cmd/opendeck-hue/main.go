@@ -109,10 +109,11 @@ func openLogs(debugEnabled bool) (info, debug *log.Logger, closeFn func(), err e
 
 // plugin holds what the event handlers need.
 type plugin struct {
-	conn    *openaction.Conn
-	info    *log.Logger
-	debug   *log.Logger
-	bridges bridgeConnector
+	conn     *openaction.Conn
+	info     *log.Logger
+	debug    *log.Logger
+	bridges  bridgeConnector
+	inflight inflightSet
 }
 
 func (p *plugin) handlers() openaction.Handlers {
@@ -120,19 +121,19 @@ func (p *plugin) handlers() openaction.Handlers {
 		WillAppear: func(ctx context.Context, ev openaction.Event, pl openaction.AppearPayload) error {
 			p.info.Printf("button appeared: action=%s context=%s at row %d col %d settings=%s",
 				shortAction(ev.Action), ev.Context, pl.Coordinates.Row, pl.Coordinates.Column, compact(pl.Settings))
-			return p.applyTitle(ctx, ev.Context, pl.Settings)
+			return p.onSettings(ctx, ev, pl.Settings)
 		},
 		WillDisappear: func(ctx context.Context, ev openaction.Event, pl openaction.AppearPayload) error {
 			p.info.Printf("button removed: action=%s context=%s", shortAction(ev.Action), ev.Context)
 			return nil
 		},
 		KeyDown: func(ctx context.Context, ev openaction.Event, pl openaction.KeyPayload) error {
-			p.info.Printf("key pressed: action=%s context=%s (not wired to the bridge yet)", shortAction(ev.Action), ev.Context)
-			return p.conn.LogMessage(ctx, "opendeck-hue: key pressed on "+shortAction(ev.Action))
+			p.info.Printf("key pressed: action=%s context=%s", shortAction(ev.Action), ev.Context)
+			return p.onKeyDown(ctx, ev, pl.Settings)
 		},
 		DidReceiveSettings: func(ctx context.Context, ev openaction.Event, pl openaction.SettingsPayload) error {
 			p.info.Printf("settings for %s: %s", ev.Context, compact(pl.Settings))
-			return p.applyTitle(ctx, ev.Context, pl.Settings)
+			return p.onSettings(ctx, ev, pl.Settings)
 		},
 		SendToPlugin: func(ctx context.Context, ev openaction.Event, payload json.RawMessage) error {
 			p.info.Printf("inspector request for %s: %s", ev.Context, compact(payload))
@@ -145,17 +146,24 @@ func (p *plugin) handlers() openaction.Handlers {
 	}
 }
 
-// applyTitle shows the chosen target's name on the button. Until a target is
-// chosen the title is left alone.
-func (p *plugin) applyTitle(ctx context.Context, buttonContext string, raw json.RawMessage) error {
+// onSettings runs when a button appears or its settings change: show the
+// target's name as the title and fetch its real state. Until a target is
+// chosen the button is left alone.
+func (p *plugin) onSettings(ctx context.Context, ev openaction.Event, raw json.RawMessage) error {
 	s, err := decodeSettings(raw)
 	if err != nil {
 		return err
 	}
-	if s.Name == "" {
+	if s.Target == "" {
 		return nil
 	}
-	return p.conn.SetTitle(ctx, buttonContext, s.Name)
+	if s.Name != "" {
+		if err := p.conn.SetTitle(ctx, ev.Context, s.Name); err != nil {
+			return err
+		}
+	}
+	p.refreshState(ctx, ev, s)
+	return nil
 }
 
 // compact renders raw JSON on one line, or "{}" when empty.

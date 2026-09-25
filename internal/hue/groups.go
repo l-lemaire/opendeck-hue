@@ -125,10 +125,17 @@ func (c *Client) ToggleGroup(ctx context.Context, g Group) (nowOn bool, err erro
 	if g.GroupedLightID == "" {
 		return false, fmt.Errorf("%s %q has no lights", g.Kind, g.Name)
 	}
-	state, err := c.GroupedLight(ctx, g.GroupedLightID)
+	return c.ToggleGroupedLight(ctx, g.GroupedLightID)
+}
+
+// ToggleGroupedLight flips a grouped_light by id. Callers that already know
+// the id (the plugin stores it in the button settings) skip the room/zone
+// lookup that ToggleGroup needs.
+func (c *Client) ToggleGroupedLight(ctx context.Context, groupedLightID string) (nowOn bool, err error) {
+	state, err := c.GroupedLight(ctx, groupedLightID)
 	if err != nil {
 		return false, err
 	}
 	nowOn = !state.On.On
-	return nowOn, c.SetGroup(ctx, g, Update{On: &nowOn})
+	return nowOn, c.v2(ctx, http.MethodPut, "grouped_light/"+groupedLightID, Update{On: &nowOn}.body(), nil)
 }
