@@ -15,9 +15,8 @@
     </radialGradient>
   </defs>
   <rect width="144" height="144" rx="22" fill="url(#bg)"/>
-  <circle cx="72" cy="78" r="56" fill="url(#glow)"/>
-  <line x1="72" y1="14" x2="72" y2="44" stroke="#e8e8ec" stroke-width="3" stroke-linecap="round"/>
-  <path d="M42 74 Q72 30 102 74 Z" fill="url(#warm)" stroke="#fff3cf" stroke-width="3" stroke-linejoin="round"/>
-  <circle cx="72" cy="80" r="7" fill="#fff6d6"/>
-  <path d="M48 78 L30 104 H114 L96 78 Z" fill="#ffcf5a" opacity="0.18"/>
+  <circle cx="72" cy="58" r="52" fill="url(#glow)"/>
+  <path d="M26 20 h92 v80 h-40 v-14 h-12 v14 h-40 z" fill="#2a2620" stroke="#fff3cf" stroke-width="3" stroke-linejoin="round"/>
+  <circle cx="72" cy="56" r="13" fill="url(#warm)" stroke="#fff3cf" stroke-width="2.5"/>
+  <circle cx="72" cy="56" r="24" fill="none" stroke="#ffcf5a" stroke-width="2" opacity="0.35"/>
 </svg>

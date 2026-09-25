@@ -15,7 +15,6 @@
     </radialGradient>
   </defs>
   <rect width="144" height="144" rx="22" fill="url(#bg)"/>
-  <line x1="72" y1="14" x2="72" y2="44" stroke="#8b8b92" stroke-width="3" stroke-linecap="round"/>
-  <path d="M42 74 Q72 30 102 74 Z" fill="#2c2c31" stroke="#8b8b92" stroke-width="3" stroke-linejoin="round"/>
-  <circle cx="72" cy="80" r="7" fill="#5a5a61"/>
+  <path d="M26 20 h92 v80 h-40 v-14 h-12 v14 h-40 z" fill="#2c2c31" stroke="#8b8b92" stroke-width="3" stroke-linejoin="round"/>
+  <circle cx="72" cy="56" r="13" fill="#5a5a61" stroke="#8b8b92" stroke-width="2.5"/>
 </svg>
