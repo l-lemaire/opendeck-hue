@@ -32,8 +32,8 @@
 			"DisableAutomaticStates": true,
 			"PropertyInspectorPath": "propertyInspector/index.html",
 			"States": [
-				{ "Image": "icons/light-off", "Name": "Off" },
-				{ "Image": "icons/light-on", "Name": "On" }
+				{ "Image": "icons/light-off", "Name": "Off", "TitleAlignment": "bottom", "FontSize": "9" },
+				{ "Image": "icons/light-on", "Name": "On", "TitleAlignment": "bottom", "FontSize": "9" }
 			]
 		},
 		{
@@ -46,8 +46,8 @@
 			"DisableAutomaticStates": true,
 			"PropertyInspectorPath": "propertyInspector/index.html",
 			"States": [
-				{ "Image": "icons/room-off", "Name": "Off" },
-				{ "Image": "icons/room-on", "Name": "On" }
+				{ "Image": "icons/room-off", "Name": "Off", "TitleAlignment": "bottom", "FontSize": "9" },
+				{ "Image": "icons/room-on", "Name": "On", "TitleAlignment": "bottom", "FontSize": "9" }
 			]
 		},
 		{
@@ -60,8 +60,8 @@
 			"DisableAutomaticStates": true,
 			"PropertyInspectorPath": "propertyInspector/index.html",
 			"States": [
-				{ "Image": "icons/zone-off", "Name": "Off" },
-				{ "Image": "icons/zone-on", "Name": "On" }
+				{ "Image": "icons/zone-off", "Name": "Off", "TitleAlignment": "bottom", "FontSize": "9" },
+				{ "Image": "icons/zone-on", "Name": "On", "TitleAlignment": "bottom", "FontSize": "9" }
 			]
 		}
 	]

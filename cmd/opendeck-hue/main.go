@@ -165,8 +165,8 @@ func (p *plugin) onSettings(ctx context.Context, ev openaction.Event, raw json.R
 	if s.Target == "" {
 		return nil
 	}
-	if s.Name != "" {
-		if err := p.conn.SetTitle(ctx, ev.Context, s.Name); err != nil {
+	if text, set := s.title(); set {
+		if err := p.conn.SetTitle(ctx, ev.Context, text); err != nil {
 			return err
 		}
 	}

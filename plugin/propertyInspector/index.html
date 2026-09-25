@@ -23,6 +23,19 @@
 			</select>
 		</div>
 		<div class="row">
+			<label for="label">Key text</label>
+			<select id="label">
+				<option value="name">Light name</option>
+				<option value="custom">Custom text</option>
+				<option value="none">None</option>
+			</select>
+		</div>
+		<div class="row" id="custom-row" hidden>
+			<label for="custom-label">Text</label>
+			<input id="custom-label" type="text" maxlength="40" placeholder="e.g. Desk" />
+		</div>
+		<p class="hint">Font, size, colour and position of the text are set in OpenDeck's key settings.</p>
+		<div class="row">
 			<label></label>
 			<button id="refresh" type="button" title="Ask the bridge again">
 				<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2v3h-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>

@@ -37,8 +37,12 @@ function connectOpenActionSocket(port, uuid, registerEvent, info, inActionInfo) 
 	websocket.onclose = () => setStatus("Disconnected from OpenDeck", "error");
 
 	$("target-label").textContent = kindLabel();
+	$("label").options[0].textContent = kindLabel() + " name";
 	$("refresh").addEventListener("click", requestTargets);
 	$("target").addEventListener("change", onTargetChosen);
+	$("label").addEventListener("change", onLabelChanged);
+	$("custom-label").addEventListener("input", onLabelChanged);
+	showLabelControls();
 	$("bridge").addEventListener("change", () => {
 		settings.bridge = $("bridge").value;
 		requestTargets();
@@ -111,15 +115,34 @@ function onTargetChosen() {
 	const select = $("target");
 	const opt = select.options[select.selectedIndex];
 	if (!opt || !opt.value) return;
-	settings = {
-		bridge: $("bridge").value || settings.bridge || "",
-		kind: kindLabel().toLowerCase(),
-		target: opt.value,
-		grouped_light: opt.dataset.groupedLight || undefined,
-		name: opt.textContent.replace(/\s+\((on|off)\)$/, ""),
-	};
+	settings.bridge = $("bridge").value || settings.bridge || "";
+	settings.kind = kindLabel().toLowerCase();
+	settings.target = opt.value;
+	settings.grouped_light = opt.dataset.groupedLight || undefined;
+	settings.name = opt.textContent.replace(/\s+\((on|off)\)$/, "");
+	saveSettings("Saved: " + settings.name);
+}
+
+// Key text controls. The choice is stored with the other settings; the
+// plugin applies it when the settings arrive.
+function showLabelControls() {
+	$("label").value = settings.label || "name";
+	$("custom-label").value = settings.custom_label || "";
+	$("custom-row").hidden = $("label").value !== "custom";
+}
+
+function onLabelChanged() {
+	settings.label = $("label").value;
+	settings.custom_label = $("custom-label").value;
+	$("custom-row").hidden = settings.label !== "custom";
+	if (settings.label !== "custom") delete settings.custom_label;
+	if (!settings.target) return; // nothing to show yet; saved with the target later
+	saveSettings("Saved");
+}
+
+function saveSettings(message) {
 	websocket.send(JSON.stringify({ event: "setSettings", context: actionInfo.context, payload: settings }));
-	setStatus("Saved: " + settings.name, "ok");
+	setStatus(message, "ok");
 }
 
 // setStatus shows a message with a coloured dot: state is "busy", "ok",

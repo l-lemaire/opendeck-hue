@@ -341,3 +341,36 @@ func TestExternalChangeUpdatesButtons(t *testing.T) {
 	case <-time.After(200 * time.Millisecond):
 	}
 }
+
+func TestSettingsTitle(t *testing.T) {
+	cases := []struct {
+		s        Settings
+		wantText string
+		wantSet  bool
+	}{
+		{Settings{Name: "Kitchen"}, "Kitchen", true},
+		{Settings{Name: "Kitchen", Label: "name"}, "Kitchen", true},
+		{Settings{Name: "Kitchen", Label: "custom", CustomLabel: "Desk"}, "Desk", true},
+		{Settings{Name: "Kitchen", Label: "custom"}, "", true}, // custom but empty: clears
+		{Settings{Name: "Kitchen", Label: "none"}, "", true},
+		{Settings{}, "", false}, // nothing chosen yet: leave the title alone
+	}
+	for _, c := range cases {
+		text, set := c.s.title()
+		if text != c.wantText || set != c.wantSet {
+			t.Errorf("%+v.title() = %q,%v want %q,%v", c.s, text, set, c.wantText, c.wantSet)
+		}
+	}
+}
+
+func TestWillAppearWithLabelNoneClearsTitle(t *testing.T) {
+	host, sent, _ := startPlugin(t)
+	push(t, host, map[string]any{
+		"event": "willAppear", "action": actionPrefix + "toggle-light", "context": "ctx-11",
+		"payload": map[string]any{"settings": map[string]any{"target": huetest.LightKitchen, "name": "Kitchen", "label": "none"}},
+	})
+	m := expectEvent(t, sent, "setTitle")
+	if m["payload"].(map[string]any)["title"] != "" {
+		t.Errorf("title = %v, want empty", m)
+	}
+}

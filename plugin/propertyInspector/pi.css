@@ -42,6 +42,30 @@ label {
 	white-space: nowrap;
 }
 
+input[type="text"] {
+	width: 100%;
+	padding: 7px 10px;
+	color: var(--text);
+	background-color: var(--field);
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	font: inherit;
+	transition: background-color 120ms, border-color 120ms, box-shadow 120ms;
+}
+input[type="text"]:hover { background-color: var(--field-hover); }
+input[type="text"]:focus {
+	outline: none;
+	border-color: var(--accent);
+	box-shadow: 0 0 0 2px rgba(247, 130, 27, 0.35);
+}
+input::placeholder { color: var(--muted); }
+
+.hint {
+	margin: -4px 0 10px 86px;
+	font-size: 11px;
+	color: var(--muted);
+}
+
 /* Native select, restyled: no system chrome, our own chevron. */
 select {
 	appearance: none;

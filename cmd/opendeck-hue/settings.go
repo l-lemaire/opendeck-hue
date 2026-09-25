@@ -25,6 +25,30 @@ type Settings struct {
 	GroupedLight string `json:"grouped_light,omitempty"`
 	// Name is the target's name at the time it was chosen, for the title.
 	Name string `json:"name,omitempty"`
+
+	// Label controls the text the plugin writes on the key:
+	//   ""  or "name"  the target's name (default)
+	//   "custom"       the text in CustomLabel
+	//   "none"         nothing from the plugin; OpenDeck's own title
+	//                  settings for the key apply
+	Label       string `json:"label,omitempty"`
+	CustomLabel string `json:"custom_label,omitempty"`
+}
+
+// title returns the text the plugin should put on the key, and whether it
+// should touch the title at all.
+func (s Settings) title() (text string, set bool) {
+	switch s.Label {
+	case "none":
+		return "", true // clear what we may have written earlier
+	case "custom":
+		return s.CustomLabel, true
+	default:
+		if s.Name == "" {
+			return "", false
+		}
+		return s.Name, true
+	}
 }
 
 // decodeSettings turns the raw JSON from an event into Settings. Empty or
