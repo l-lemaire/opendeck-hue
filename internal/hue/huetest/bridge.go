@@ -1,12 +1,20 @@
-package hue
+// Package huetest provides a fake Hue bridge for tests: an HTTPS server
+// with a bridge-shaped certificate that implements the endpoints the hue
+// package uses, with mutable light, room and zone state.
+//
+// It lives in its own package (instead of a _test.go file in package hue) so
+// that tests of other packages, such as the OpenDeck plugin, can use it.
+package huetest
 
 import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/hex"
 	"encoding/json"
 	"math/big"
 	"net/http"
@@ -18,18 +26,25 @@ import (
 	"time"
 )
 
-// fakeBridge is an HTTPS server that behaves like a Hue bridge for the
-// endpoints this package uses. Its certificate mimics a real one: CN is the
-// bridge id in upper case, issuer "root-bridge", no SAN.
-type fakeBridge struct {
+// AppKeyHeader mirrors the header name the hue package sends.
+const AppKeyHeader = "hue-application-key"
+
+// Bridge is an HTTPS server that behaves like a Hue bridge for the
+// endpoints the hue package uses. Its certificate mimics a real one: CN is
+// the bridge id in upper case, issuer "root-bridge", no SAN.
+type Bridge struct {
 	*httptest.Server
-	id          string
-	fingerprint string
-	// refusals is how many pairing attempts return "link button not
+	// ID is the lower-case bridge id.
+	ID string
+	// Fingerprint is "sha256:<hex>" of the certificate, as the hue package
+	// computes it.
+	Fingerprint string
+	// Refusals is how many pairing attempts return "link button not
 	// pressed" before one succeeds. atomic because the server handles
 	// requests on other goroutines.
-	refusals atomic.Int32
-	appKey   string
+	Refusals atomic.Int32
+	// AppKey is the only application key the fake accepts.
+	AppKey string
 
 	// Mutable v2 resources, keyed by id. mu guards them because the HTTP
 	// server handles each request on its own goroutine.
@@ -41,51 +56,58 @@ type fakeBridge struct {
 	puts    []string // "type/id" of every PUT, in order, for assertions
 }
 
-// Fixed ids so tests can refer to them.
+// Puts returns "type/id" for every PUT received so far, in order.
+func (fb *Bridge) Puts() []string {
+	fb.mu.Lock()
+	defer fb.mu.Unlock()
+	return append([]string(nil), fb.puts...)
+}
+
+// Fixed ids of the seeded resources so tests can refer to them.
 const (
-	lightKitchen  = "11111111-1111-1111-1111-111111111111"
-	lightDesk     = "22222222-2222-2222-2222-222222222222"
-	lightPlug     = "33333333-3333-3333-3333-333333333333"
-	groupedKitchn = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
-	groupedOffice = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
-	roomKitchen   = "cccccccc-cccc-cccc-cccc-cccccccccccc"
-	zoneOffice    = "dddddddd-dddd-dddd-dddd-dddddddddddd"
+	LightKitchen   = "11111111-1111-1111-1111-111111111111"
+	LightDesk      = "22222222-2222-2222-2222-222222222222"
+	LightPlug      = "33333333-3333-3333-3333-333333333333"
+	GroupedKitchen = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+	GroupedOffice  = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+	RoomKitchen    = "cccccccc-cccc-cccc-cccc-cccccccccccc"
+	ZoneOffice     = "dddddddd-dddd-dddd-dddd-dddddddddddd"
 )
 
-func (fb *fakeBridge) seedResources() {
+func (fb *Bridge) seedResources() {
 	fb.lights = map[string]map[string]any{
-		lightKitchen: {"id": lightKitchen, "id_v1": "/lights/1", "type": "light",
+		LightKitchen: {"id": LightKitchen, "id_v1": "/lights/1", "type": "light",
 			"metadata": map[string]any{"name": "Kitchen", "archetype": "sultan_bulb"},
 			"on":       map[string]any{"on": true}, "dimming": map[string]any{"brightness": 80.0}},
-		lightDesk: {"id": lightDesk, "id_v1": "/lights/2", "type": "light",
+		LightDesk: {"id": LightDesk, "id_v1": "/lights/2", "type": "light",
 			"metadata": map[string]any{"name": "Desk lamp", "archetype": "spot_bulb"},
 			"on":       map[string]any{"on": false}, "dimming": map[string]any{"brightness": 50.0}},
-		lightPlug: {"id": lightPlug, "id_v1": "/lights/3", "type": "light",
+		LightPlug: {"id": LightPlug, "id_v1": "/lights/3", "type": "light",
 			"metadata": map[string]any{"name": "Desk plug", "archetype": "plug"},
 			"on":       map[string]any{"on": false}},
 	}
 	fb.grouped = map[string]map[string]any{
-		groupedKitchn: {"id": groupedKitchn, "type": "grouped_light", "owner": map[string]any{"rid": roomKitchen, "rtype": "room"},
+		GroupedKitchen: {"id": GroupedKitchen, "type": "grouped_light", "owner": map[string]any{"rid": RoomKitchen, "rtype": "room"},
 			"on": map[string]any{"on": true}, "dimming": map[string]any{"brightness": 80.0}},
-		groupedOffice: {"id": groupedOffice, "type": "grouped_light", "owner": map[string]any{"rid": zoneOffice, "rtype": "zone"},
+		GroupedOffice: {"id": GroupedOffice, "type": "grouped_light", "owner": map[string]any{"rid": ZoneOffice, "rtype": "zone"},
 			"on": map[string]any{"on": false}, "dimming": map[string]any{"brightness": 50.0}},
 	}
 	fb.rooms = []map[string]any{{
-		"id": roomKitchen, "type": "room", "metadata": map[string]any{"name": "Kitchen"},
+		"id": RoomKitchen, "type": "room", "metadata": map[string]any{"name": "Kitchen"},
 		"children": []map[string]any{{"rid": "dev-1", "rtype": "device"}},
-		"services": []map[string]any{{"rid": groupedKitchn, "rtype": "grouped_light"}},
+		"services": []map[string]any{{"rid": GroupedKitchen, "rtype": "grouped_light"}},
 	}}
 	fb.zones = []map[string]any{{
-		"id": zoneOffice, "type": "zone", "metadata": map[string]any{"name": "Office"},
-		"children": []map[string]any{{"rid": lightDesk, "rtype": "light"}, {"rid": lightPlug, "rtype": "light"}},
-		"services": []map[string]any{{"rid": groupedOffice, "rtype": "grouped_light"}},
+		"id": ZoneOffice, "type": "zone", "metadata": map[string]any{"name": "Office"},
+		"children": []map[string]any{{"rid": LightDesk, "rtype": "light"}, {"rid": LightPlug, "rtype": "light"}},
+		"services": []map[string]any{{"rid": GroupedOffice, "rtype": "grouped_light"}},
 	}}
 }
 
 // v2Handler serves /clip/v2/resource/{type} and {type}/{id} for the seeded
 // resources, requiring the application key like the real bridge.
-func (fb *fakeBridge) v2Handler(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get(appKeyHeader) != fb.appKey {
+func (fb *Bridge) v2Handler(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get(AppKeyHeader) != fb.AppKey {
 		w.WriteHeader(http.StatusUnauthorized)
 		w.Write([]byte(`{"errors":[{"description":"unauthorized user"}],"data":[]}`))
 		return
@@ -157,14 +179,16 @@ func (fb *fakeBridge) v2Handler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func newFakeBridge(t *testing.T, id string) *fakeBridge {
+// New starts a fake bridge with the given id and seeded resources. It is
+// closed automatically when the test ends.
+func New(t *testing.T, id string) *Bridge {
 	t.Helper()
-	fb := &fakeBridge{id: strings.ToLower(id), appKey: "fake-app-key-0123456789"}
+	fb := &Bridge{ID: strings.ToLower(id), AppKey: "fake-app-key-0123456789"}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/0/config", func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]string{
-			"name": "Fake Bridge", "bridgeid": strings.ToUpper(fb.id), "modelid": "BSB002",
+			"name": "Fake Bridge", "bridgeid": strings.ToUpper(fb.ID), "modelid": "BSB002",
 			"apiversion": "1.78.0", "swversion": "1978293000",
 		})
 	})
@@ -174,35 +198,36 @@ func newFakeBridge(t *testing.T, id string) *fakeBridge {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if fb.refusals.Add(-1) >= 0 {
+		if fb.Refusals.Add(-1) >= 0 {
 			w.Write([]byte(`[{"error":{"type":101,"address":"","description":"link button not pressed"}}]`))
 			return
 		}
-		w.Write([]byte(`[{"success":{"username":"` + fb.appKey + `","clientkey":"00112233445566778899AABBCCDDEEFF"}}]`))
+		w.Write([]byte(`[{"success":{"username":"` + fb.AppKey + `","clientkey":"00112233445566778899AABBCCDDEEFF"}}]`))
 	})
 	fb.seedResources()
 	mux.HandleFunc("/clip/v2/resource/{type}", fb.v2Handler)
 	mux.HandleFunc("/clip/v2/resource/{type}/{id}", fb.v2Handler)
 	mux.HandleFunc("GET /clip/v2/resource/bridge", func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get(appKeyHeader) != fb.appKey {
+		if r.Header.Get(AppKeyHeader) != fb.AppKey {
 			w.WriteHeader(http.StatusUnauthorized)
 			w.Write([]byte(`{"errors":[{"description":"unauthorized user"}],"data":[]}`))
 			return
 		}
-		w.Write([]byte(`{"errors":[],"data":[{"id":"bridge-1","type":"bridge","bridge_id":"` + fb.id + `"}]}`))
+		w.Write([]byte(`{"errors":[],"data":[{"id":"bridge-1","type":"bridge","bridge_id":"` + fb.ID + `"}]}`))
 	})
 
 	fb.Server = httptest.NewUnstartedServer(mux)
-	cert := selfSignedBridgeCert(t, strings.ToUpper(fb.id))
+	cert := selfSignedBridgeCert(t, strings.ToUpper(fb.ID))
 	fb.Server.TLS = &tls.Config{Certificates: []tls.Certificate{cert}}
 	fb.Server.StartTLS()
-	fb.fingerprint = fingerprint(cert.Certificate[0])
+	sum := sha256.Sum256(cert.Certificate[0])
+	fb.Fingerprint = "sha256:" + hex.EncodeToString(sum[:])
 	t.Cleanup(fb.Server.Close)
 	return fb
 }
 
-// addr returns host:port without the https:// prefix.
-func (fb *fakeBridge) addr() string {
+// Addr returns host:port without the https:// prefix.
+func (fb *Bridge) Addr() string {
 	return strings.TrimPrefix(fb.URL, "https://")
 }
 

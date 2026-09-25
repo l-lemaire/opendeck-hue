@@ -1,0 +1,31 @@
+<!doctype html>
+<!--
+  Property inspector shared by the three actions. OpenDeck loads this page
+  in a webview next to the button's settings and calls
+  connectOpenActionSocket(...) with the connection details. Everything else
+  is in pi.js. No framework, no build step.
+-->
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<link rel="stylesheet" href="pi.css" />
+		<script src="pi.js"></script>
+	</head>
+	<body>
+		<div class="row" id="bridge-row" hidden>
+			<label for="bridge">Bridge</label>
+			<select id="bridge"></select>
+		</div>
+		<div class="row">
+			<label for="target" id="target-label">Target</label>
+			<select id="target" disabled>
+				<option value="">Loading…</option>
+			</select>
+		</div>
+		<div class="row">
+			<label></label>
+			<button id="refresh" type="button">Refresh list</button>
+		</div>
+		<p id="status" class="status"></p>
+	</body>
+</html>

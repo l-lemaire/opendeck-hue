@@ -30,6 +30,7 @@
 			"Controllers": ["Keypad"],
 			"SupportedInMultiActions": true,
 			"DisableAutomaticStates": true,
+			"PropertyInspectorPath": "propertyInspector/index.html",
 			"States": [
 				{ "Image": "icons/light-off", "Name": "Off" },
 				{ "Image": "icons/light-on", "Name": "On" }
@@ -43,6 +44,7 @@
 			"Controllers": ["Keypad"],
 			"SupportedInMultiActions": true,
 			"DisableAutomaticStates": true,
+			"PropertyInspectorPath": "propertyInspector/index.html",
 			"States": [
 				{ "Image": "icons/room-off", "Name": "Off" },
 				{ "Image": "icons/room-on", "Name": "On" }
@@ -56,6 +58,7 @@
 			"Controllers": ["Keypad"],
 			"SupportedInMultiActions": true,
 			"DisableAutomaticStates": true,
+			"PropertyInspectorPath": "propertyInspector/index.html",
 			"States": [
 				{ "Image": "icons/zone-off", "Name": "Off" },
 				{ "Image": "icons/zone-on", "Name": "On" }

@@ -69,7 +69,7 @@ func run() error {
 	defer conn.Close()
 	info.Printf("connected to OpenDeck on port %d", args.Port)
 
-	p := &plugin{conn: conn, info: info, debug: debug}
+	p := &plugin{conn: conn, info: info, debug: debug, bridges: newFileConnector(debug)}
 	err = conn.Run(ctx, p.handlers())
 	if err != nil {
 		info.Printf("ERROR %v", err)
@@ -107,12 +107,12 @@ func openLogs(debugEnabled bool) (info, debug *log.Logger, closeFn func(), err e
 	return info, debug, func() { f.Close() }, nil
 }
 
-// plugin holds what the event handlers need. Step 2 only logs what happens;
-// the toggle behaviour arrives in step 3.
+// plugin holds what the event handlers need.
 type plugin struct {
-	conn  *openaction.Conn
-	info  *log.Logger
-	debug *log.Logger
+	conn    *openaction.Conn
+	info    *log.Logger
+	debug   *log.Logger
+	bridges bridgeConnector
 }
 
 func (p *plugin) handlers() openaction.Handlers {
@@ -120,7 +120,7 @@ func (p *plugin) handlers() openaction.Handlers {
 		WillAppear: func(ctx context.Context, ev openaction.Event, pl openaction.AppearPayload) error {
 			p.info.Printf("button appeared: action=%s context=%s at row %d col %d settings=%s",
 				shortAction(ev.Action), ev.Context, pl.Coordinates.Row, pl.Coordinates.Column, compact(pl.Settings))
-			return nil
+			return p.applyTitle(ctx, ev.Context, pl.Settings)
 		},
 		WillDisappear: func(ctx context.Context, ev openaction.Event, pl openaction.AppearPayload) error {
 			p.info.Printf("button removed: action=%s context=%s", shortAction(ev.Action), ev.Context)
@@ -132,7 +132,11 @@ func (p *plugin) handlers() openaction.Handlers {
 		},
 		DidReceiveSettings: func(ctx context.Context, ev openaction.Event, pl openaction.SettingsPayload) error {
 			p.info.Printf("settings for %s: %s", ev.Context, compact(pl.Settings))
-			return nil
+			return p.applyTitle(ctx, ev.Context, pl.Settings)
+		},
+		SendToPlugin: func(ctx context.Context, ev openaction.Event, payload json.RawMessage) error {
+			p.info.Printf("inspector request for %s: %s", ev.Context, compact(payload))
+			return p.handleInspectorMessage(ctx, ev, payload)
 		},
 		Unknown: func(ctx context.Context, ev openaction.Event) error {
 			p.info.Printf("event %s ignored", ev.Event)
@@ -141,13 +145,17 @@ func (p *plugin) handlers() openaction.Handlers {
 	}
 }
 
-// shortAction strips the plugin prefix: "com.github.llemaire.hue.toggle-light" -> "toggle-light".
-func shortAction(uuid string) string {
-	const prefix = "com.github.llemaire.hue."
-	if len(uuid) > len(prefix) && uuid[:len(prefix)] == prefix {
-		return uuid[len(prefix):]
+// applyTitle shows the chosen target's name on the button. Until a target is
+// chosen the title is left alone.
+func (p *plugin) applyTitle(ctx context.Context, buttonContext string, raw json.RawMessage) error {
+	s, err := decodeSettings(raw)
+	if err != nil {
+		return err
 	}
-	return uuid
+	if s.Name == "" {
+		return nil
+	}
+	return p.conn.SetTitle(ctx, buttonContext, s.Name)
 }
 
 // compact renders raw JSON on one line, or "{}" when empty.

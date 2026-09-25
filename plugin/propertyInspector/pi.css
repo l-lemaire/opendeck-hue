@@ -1,0 +1,36 @@
+/* Minimal styling that follows the host's dark theme. */
+body {
+	margin: 0;
+	padding: 8px;
+	font: 13px ui-sans-serif, system-ui, sans-serif;
+	color: #d8d8d8;
+	background: transparent;
+}
+.row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 8px;
+}
+label {
+	flex: 0 0 72px;
+	text-align: right;
+	color: #9a9a9a;
+}
+select, button {
+	flex: 1;
+	min-width: 0;
+	padding: 4px 6px;
+	color: #e6e6e6;
+	background: #2d2d2d;
+	border: 1px solid #3d3d3d;
+	border-radius: 4px;
+	font: inherit;
+}
+button {
+	flex: 0 0 auto;
+	cursor: pointer;
+}
+button:hover { background: #383838; }
+.status { margin: 4px 0 0 80px; color: #9a9a9a; min-height: 1.2em; }
+.status.error { color: #f0705a; }

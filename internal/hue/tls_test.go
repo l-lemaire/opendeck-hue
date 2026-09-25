@@ -2,6 +2,7 @@ package hue
 
 import (
 	"context"
+	"github.com/llemaire/streamdeck/internal/hue/huetest"
 	"strings"
 	"testing"
 )
@@ -9,8 +10,8 @@ import (
 const testBridgeID = "001788fffe0a0b0c"
 
 func TestClientAcceptsMatchingCertificate(t *testing.T) {
-	fb := newFakeBridge(t, testBridgeID)
-	c := NewClient(ClientOptions{Addr: fb.addr(), ID: testBridgeID, Log: testLogger(t)})
+	fb := huetest.New(t, testBridgeID)
+	c := NewClient(ClientOptions{Addr: fb.Addr(), ID: testBridgeID, Log: testLogger(t)})
 
 	info, err := c.Info(context.Background())
 	if err != nil {
@@ -20,14 +21,14 @@ func TestClientAcceptsMatchingCertificate(t *testing.T) {
 		t.Errorf("info = %+v", info)
 	}
 	cn, fp, ok := c.SeenCertificate()
-	if !ok || cn != testBridgeID || fp != fb.fingerprint {
-		t.Errorf("seen = %q %q %v, want %q %q", cn, fp, ok, testBridgeID, fb.fingerprint)
+	if !ok || cn != testBridgeID || fp != fb.Fingerprint {
+		t.Errorf("seen = %q %q %v, want %q %q", cn, fp, ok, testBridgeID, fb.Fingerprint)
 	}
 }
 
 func TestClientRejectsWrongBridgeID(t *testing.T) {
-	fb := newFakeBridge(t, testBridgeID)
-	c := NewClient(ClientOptions{Addr: fb.addr(), ID: "ecb5fafffe000000", Log: testLogger(t)})
+	fb := huetest.New(t, testBridgeID)
+	c := NewClient(ClientOptions{Addr: fb.Addr(), ID: "ecb5fafffe000000", Log: testLogger(t)})
 
 	_, err := c.Info(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "belongs to bridge "+testBridgeID) {
@@ -36,8 +37,8 @@ func TestClientRejectsWrongBridgeID(t *testing.T) {
 }
 
 func TestClientRejectsChangedCertificate(t *testing.T) {
-	fb := newFakeBridge(t, testBridgeID)
-	c := NewClient(ClientOptions{Addr: fb.addr(), ID: testBridgeID, Fingerprint: "sha256:deadbeef", Log: testLogger(t)})
+	fb := huetest.New(t, testBridgeID)
+	c := NewClient(ClientOptions{Addr: fb.Addr(), ID: testBridgeID, Fingerprint: "sha256:deadbeef", Log: testLogger(t)})
 
 	_, err := c.Info(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "certificate changed") {
@@ -46,16 +47,16 @@ func TestClientRejectsChangedCertificate(t *testing.T) {
 }
 
 func TestClientAcceptsPinnedCertificate(t *testing.T) {
-	fb := newFakeBridge(t, testBridgeID)
-	c := NewClient(ClientOptions{Addr: fb.addr(), ID: testBridgeID, Fingerprint: fb.fingerprint})
+	fb := huetest.New(t, testBridgeID)
+	c := NewClient(ClientOptions{Addr: fb.Addr(), ID: testBridgeID, Fingerprint: fb.Fingerprint})
 	if _, err := c.Info(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestProbeModeAcceptsAnyID(t *testing.T) {
-	fb := newFakeBridge(t, testBridgeID)
-	c := NewClient(ClientOptions{Addr: fb.addr()}) // no ID: probe before pairing
+	fb := huetest.New(t, testBridgeID)
+	c := NewClient(ClientOptions{Addr: fb.Addr()}) // no ID: probe before pairing
 	info, err := c.Info(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -66,12 +67,12 @@ func TestProbeModeAcceptsAnyID(t *testing.T) {
 }
 
 func TestCheckKey(t *testing.T) {
-	fb := newFakeBridge(t, testBridgeID)
-	good := NewClient(ClientOptions{Addr: fb.addr(), ID: testBridgeID, AppKey: fb.appKey})
+	fb := huetest.New(t, testBridgeID)
+	good := NewClient(ClientOptions{Addr: fb.Addr(), ID: testBridgeID, AppKey: fb.AppKey})
 	if err := good.CheckKey(context.Background()); err != nil {
 		t.Errorf("valid key rejected: %v", err)
 	}
-	bad := NewClient(ClientOptions{Addr: fb.addr(), ID: testBridgeID, AppKey: "wrong"})
+	bad := NewClient(ClientOptions{Addr: fb.Addr(), ID: testBridgeID, AppKey: "wrong"})
 	if err := bad.CheckKey(context.Background()); err == nil || !strings.Contains(err.Error(), "rejected") {
 		t.Errorf("invalid key accepted: %v", err)
 	}
