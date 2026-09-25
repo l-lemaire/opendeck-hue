@@ -289,3 +289,55 @@ func TestSettingsHelpers(t *testing.T) {
 		t.Error("non-object settings should fail")
 	}
 }
+
+// waitForState drains messages until a setState for the button with the
+// wanted state arrives. Refreshes may produce extra setState messages with
+// the previous state first, so exact sequencing is not asserted.
+func waitForState(t *testing.T, ch chan map[string]any, buttonContext string, want int) {
+	t.Helper()
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case m := <-ch:
+			if m["event"] == "setState" && m["context"] == buttonContext && stateOf(m) == want {
+				return
+			}
+		case <-deadline:
+			t.Fatalf("no setState %d for %s within 5s", want, buttonContext)
+		}
+	}
+}
+
+func TestExternalChangeUpdatesButtons(t *testing.T) {
+	host, sent, fb := startPlugin(t)
+	push(t, host, map[string]any{
+		"event": "willAppear", "action": actionPrefix + "toggle-light", "context": "key-a",
+		"payload": map[string]any{"settings": map[string]any{"target": huetest.LightKitchen, "name": "Kitchen", "kind": "light"}},
+	})
+	push(t, host, map[string]any{
+		"event": "willAppear", "action": actionPrefix + "toggle-zone", "context": "key-b",
+		"payload": map[string]any{"settings": map[string]any{"target": huetest.ZoneOffice, "grouped_light": huetest.GroupedOffice, "name": "Office", "kind": "zone"}},
+	})
+	waitForState(t, sent, "key-a", stateOn)  // initial refresh: kitchen on
+	waitForState(t, sent, "key-b", stateOff) // office off
+
+	// Changes made outside the plugin, as from the Hue app.
+	fb.SetLightOn(huetest.LightKitchen, false)
+	waitForState(t, sent, "key-a", stateOff)
+	fb.SetGroupedLightOn(huetest.GroupedOffice, true)
+	waitForState(t, sent, "key-b", stateOn)
+
+	// A removed button is no longer updated.
+	push(t, host, map[string]any{"event": "willDisappear", "action": actionPrefix + "toggle-light", "context": "key-a", "payload": map[string]any{}})
+	time.Sleep(100 * time.Millisecond)
+	fb.SetLightOn(huetest.LightKitchen, true)
+	fb.SetGroupedLightOn(huetest.GroupedOffice, false) // key-b still updates, proving the stream is alive
+	waitForState(t, sent, "key-b", stateOff)
+	select {
+	case m := <-sent:
+		if m["context"] == "key-a" {
+			t.Errorf("removed button was updated: %v", m)
+		}
+	case <-time.After(200 * time.Millisecond):
+	}
+}

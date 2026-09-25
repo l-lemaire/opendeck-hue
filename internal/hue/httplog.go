@@ -50,8 +50,10 @@ func (t loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		return nil, err
 	}
 
-	// DumpResponse also reads and refills the body.
-	dump, err = httputil.DumpResponse(resp, true)
+	// DumpResponse also reads and refills the body. Not for an event
+	// stream, whose body never ends: dump its headers only.
+	withBody := resp.Header.Get("Content-Type") != "text/event-stream" && req.Header.Get("Accept") != "text/event-stream"
+	dump, err = httputil.DumpResponse(resp, withBody)
 	if err != nil {
 		t.log.Printf("http: could not dump response: %v", err)
 	} else {

@@ -86,6 +86,8 @@ func run(args []string) error {
 		return a.auth(commandArgs)
 	case "list":
 		return a.list(commandArgs)
+	case "watch":
+		return a.watch(commandArgs)
 	case "plugin":
 		return a.plugin(commandArgs)
 	case "on", "off", "toggle":
@@ -133,6 +135,7 @@ commands:
   on     light|room|zone [--brightness N] [--dry-run] <name or id>
   off    light|room|zone [--dry-run] <name or id>
   toggle light|room|zone [--dry-run] <name or id>
+  watch         print changes reported by the bridge until Ctrl-C
   plugin status        show where the OpenDeck plugin is installed and logs
   plugin debug on|off  toggle full debug output in the plugin log
   version       print the version

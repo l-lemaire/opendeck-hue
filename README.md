@@ -41,6 +41,7 @@ bin/hue on light --brightness 40 kitchen
 bin/hue off room salon
 bin/hue toggle zone "zone ordi"
 bin/hue toggle light --dry-run kitchen    # print the request, send nothing
+bin/hue watch                    # live changes from the bridge's event stream
 bin/hue --debug discover         # show every packet and HTTP exchange
 ```
 
@@ -73,6 +74,11 @@ make plugin-log         # follow OpenDeck's log and the plugin's log
 bin/hue plugin status   # install path, log path, debug flag
 bin/hue plugin debug on # full protocol and HTTP dumps in the plugin log
 ```
+
+Buttons follow the real state of their light: the plugin keeps the bridge's
+event stream open and updates every button when a light or group changes,
+whatever switched it. After a lost connection it reconnects with a backoff
+and re-reads every button.
 
 The plugin reads the bridge address and certificate pin from
 `~/.config/hue/config.json` and the key from the keyring, so `hue auth` is the

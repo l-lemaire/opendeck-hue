@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync"
 	"syscall"
 
 	"github.com/llemaire/streamdeck/internal/config"
@@ -114,6 +115,12 @@ type plugin struct {
 	debug    *log.Logger
 	bridges  bridgeConnector
 	inflight inflightSet
+
+	// mu guards the two maps below, which the event loop and the watcher
+	// goroutines both touch.
+	mu       sync.Mutex
+	buttons  map[string]button // by button context
+	watchers map[string]bool   // bridge keys with a running watchBridge
 }
 
 func (p *plugin) handlers() openaction.Handlers {
@@ -125,6 +132,7 @@ func (p *plugin) handlers() openaction.Handlers {
 		},
 		WillDisappear: func(ctx context.Context, ev openaction.Event, pl openaction.AppearPayload) error {
 			p.info.Printf("button removed: action=%s context=%s", shortAction(ev.Action), ev.Context)
+			p.forgetButton(ev.Context)
 			return nil
 		},
 		KeyDown: func(ctx context.Context, ev openaction.Event, pl openaction.KeyPayload) error {
@@ -162,6 +170,7 @@ func (p *plugin) onSettings(ctx context.Context, ev openaction.Event, raw json.R
 			return err
 		}
 	}
+	p.trackButton(ctx, ev, s)
 	p.refreshState(ctx, ev, s)
 	return nil
 }

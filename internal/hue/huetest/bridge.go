@@ -16,6 +16,9 @@ import (
 	"crypto/x509/pkix"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"io"
+	"log"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
@@ -54,6 +57,105 @@ type Bridge struct {
 	rooms   []map[string]any
 	zones   []map[string]any
 	puts    []string // "type/id" of every PUT, in order, for assertions
+
+	// subscribers are open event streams; each gets every emitted event.
+	subscribers map[chan string]struct{}
+}
+
+// Emit sends one SSE data payload (a JSON array of events, as the bridge
+// formats them) to every open event stream.
+func (fb *Bridge) Emit(payload string) {
+	fb.mu.Lock()
+	defer fb.mu.Unlock()
+	for ch := range fb.subscribers {
+		select {
+		case ch <- payload:
+		default: // a stalled subscriber does not block the fake
+		}
+	}
+}
+
+// emitUpdate formats and emits an "update" event for one resource with its
+// current on state, the way the real bridge does after a PUT.
+func (fb *Bridge) emitUpdate(rtype string, res map[string]any) {
+	on, _ := res["on"].(map[string]any)
+	data := map[string]any{"id": res["id"], "type": rtype, "on": on}
+	if d, ok := res["dimming"]; ok {
+		data["dimming"] = d
+	}
+	event := []map[string]any{{
+		"creationtime": time.Now().UTC().Format(time.RFC3339),
+		"id":           "evt-" + res["id"].(string),
+		"type":         "update",
+		"data":         []any{data},
+	}}
+	payload, _ := json.Marshal(event)
+	// emitUpdate is called with mu held by the PUT handler; deliver
+	// without re-locking.
+	for ch := range fb.subscribers {
+		select {
+		case ch <- string(payload):
+		default:
+		}
+	}
+}
+
+// SetLightOn changes a light's state as if done from the Hue app, and
+// emits the corresponding event.
+func (fb *Bridge) SetLightOn(id string, on bool) {
+	fb.mu.Lock()
+	defer fb.mu.Unlock()
+	if res, ok := fb.lights[id]; ok {
+		res["on"] = map[string]any{"on": on}
+		fb.emitUpdate("light", res)
+	}
+}
+
+// SetGroupedLightOn does the same for a grouped_light.
+func (fb *Bridge) SetGroupedLightOn(id string, on bool) {
+	fb.mu.Lock()
+	defer fb.mu.Unlock()
+	if res, ok := fb.grouped[id]; ok {
+		res["on"] = map[string]any{"on": on}
+		fb.emitUpdate("grouped_light", res)
+	}
+}
+
+// eventStream serves GET /eventstream/clip/v2 until the client goes away.
+func (fb *Bridge) eventStream(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get(AppKeyHeader) != fb.AppKey {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	ch := make(chan string, 16)
+	fb.mu.Lock()
+	if fb.subscribers == nil {
+		fb.subscribers = map[chan string]struct{}{}
+	}
+	fb.subscribers[ch] = struct{}{}
+	fb.mu.Unlock()
+	defer func() {
+		fb.mu.Lock()
+		delete(fb.subscribers, ch)
+		fb.mu.Unlock()
+	}()
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.WriteHeader(http.StatusOK)
+	flusher, _ := w.(http.Flusher)
+	fmt.Fprint(w, ": hi\n\n")
+	flusher.Flush()
+	seq := 0
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case payload := <-ch:
+			seq++
+			fmt.Fprintf(w, "id: %d:0\ndata: %s\n\n", seq, payload)
+			flusher.Flush()
+		}
+	}
 }
 
 // Puts returns "type/id" for every PUT received so far, in order.
@@ -173,6 +275,7 @@ func (fb *Bridge) v2Handler(w http.ResponseWriter, r *http.Request) {
 			res[k] = v
 		}
 		fb.puts = append(fb.puts, rtype+"/"+id)
+		fb.emitUpdate(rtype, res)
 		write(http.StatusOK, []map[string]string{{"rid": id, "rtype": rtype}})
 	default:
 		write(http.StatusMethodNotAllowed, []any{}, "method not allowed")
@@ -205,6 +308,7 @@ func New(t *testing.T, id string) *Bridge {
 		w.Write([]byte(`[{"success":{"username":"` + fb.AppKey + `","clientkey":"00112233445566778899AABBCCDDEEFF"}}]`))
 	})
 	fb.seedResources()
+	mux.HandleFunc("GET /eventstream/clip/v2", fb.eventStream)
 	mux.HandleFunc("/clip/v2/resource/{type}", fb.v2Handler)
 	mux.HandleFunc("/clip/v2/resource/{type}/{id}", fb.v2Handler)
 	mux.HandleFunc("GET /clip/v2/resource/bridge", func(w http.ResponseWriter, r *http.Request) {
@@ -217,6 +321,9 @@ func New(t *testing.T, id string) *Bridge {
 	})
 
 	fb.Server = httptest.NewUnstartedServer(mux)
+	// Tests that deliberately present a wrong id make the TLS handshake
+	// fail; keep the server from printing that to the test output.
+	fb.Server.Config.ErrorLog = log.New(io.Discard, "", 0)
 	cert := selfSignedBridgeCert(t, strings.ToUpper(fb.ID))
 	fb.Server.TLS = &tls.Config{Certificates: []tls.Certificate{cert}}
 	fb.Server.StartTLS()
