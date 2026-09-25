@@ -28,6 +28,16 @@ func TestRunRejectsMalformedArguments(t *testing.T) {
 		{[]string{"auth", "status", "extra"}, `unexpected argument "extra"`},
 		{[]string{"auth", "forget", "--id"}, "flag needs an argument"},
 		{[]string{"auth", "forget", "now"}, `unexpected argument "now"`},
+		{[]string{"lights"}, "subcommand is required"},
+		{[]string{"lights", "bogus"}, `unknown subcommand "bogus"`},
+		{[]string{"lights", "list", "kitchen"}, `unexpected argument "kitchen"`},
+		{[]string{"lights", "toggle"}, "missing light name or id"},
+		{[]string{"lights", "toggle", "kitchen", "desk"}, `unexpected argument "desk"`},
+		{[]string{"lights", "toggle", "kitchen", "--dry-run"}, "flags go before the name"},
+		{[]string{"lights", "off", "--brightness", "50", "kitchen"}, "flag provided but not defined"},
+		{[]string{"rooms"}, "subcommand is required"},
+		{[]string{"rooms", "on", "--brightness", "x", "kitchen"}, "invalid value"},
+		{[]string{"rooms", "toggle"}, "missing room name or id"},
 		// global flags must precede the command
 		{[]string{"discover", "--debug"}, "flag provided but not defined"},
 	}

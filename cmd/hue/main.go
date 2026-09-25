@@ -84,6 +84,10 @@ func run(args []string) error {
 		return a.discover(commandArgs)
 	case "auth":
 		return a.auth(commandArgs)
+	case "lights":
+		return a.lights(commandArgs)
+	case "rooms":
+		return a.rooms(commandArgs)
 	case "version":
 		if len(commandArgs) > 0 {
 			return fmt.Errorf("version: unexpected argument %q", commandArgs[0])
@@ -123,7 +127,14 @@ commands:
   auth          pair with a bridge (press its link button) and store the key
   auth status   list paired bridges and check their keys
   auth forget   delete a bridge's key and configuration
+  lights list   list lights with their state
+  lights on|off|toggle [--dry-run] [--brightness N] <name or id>
+  rooms list    list rooms and zones with their state
+  rooms on|off|toggle  [--dry-run] [--brightness N] <name or id>
   version       print the version
+
+Names are matched case-insensitively; a unique prefix is enough.
+Command flags go before the name: hue lights toggle --dry-run kitchen
 
 global flags (must come before the command):
 `)

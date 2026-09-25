@@ -32,8 +32,18 @@ bin/hue discover --json
 bin/hue auth                     # pair: press the bridge's link button when asked
 bin/hue auth status              # list paired bridges and check their keys
 bin/hue auth forget              # delete a bridge's key and configuration
+bin/hue lights list              # lights with state and brightness
+bin/hue lights toggle kitchen    # name (case-insensitive, unique prefix ok) or id
+bin/hue lights on --brightness 40 kitchen
+bin/hue rooms list               # rooms and zones
+bin/hue rooms off salon
+bin/hue lights toggle --dry-run kitchen   # print the request, send nothing
 bin/hue --debug discover         # show every packet and HTTP exchange
 ```
+
+Command flags go before the light or room name. Writes use the CLIP v2 API;
+only the pairing calls still use the original v1 endpoints, which have no v2
+equivalent.
 
 Global flags such as `--debug` go before the command name.
 

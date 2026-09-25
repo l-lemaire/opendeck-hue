@@ -20,6 +20,7 @@ type Client struct {
 	log    *log.Logger
 	check  *certCheck
 	http   *http.Client
+	dryRun io.Writer
 }
 
 // ClientOptions is everything NewClient needs. Only Addr is mandatory.
@@ -38,6 +39,11 @@ type ClientOptions struct {
 	Log *log.Logger
 	// Timeout caps one whole request. Default 15 s.
 	Timeout time.Duration
+	// DryRun, when not nil, turns every non-GET request into a description
+	// written to this writer instead of a network call. Reads still happen,
+	// so a toggle can show what it would have sent. Living here, at the
+	// lowest level, means no code path can write to the bridge by accident.
+	DryRun io.Writer
 }
 
 // NewClient wires the certificate check and the debug logger into an HTTP
@@ -60,6 +66,7 @@ func NewClient(o ClientOptions) *Client {
 		appKey: o.AppKey,
 		log:    o.Log,
 		check:  check,
+		dryRun: o.DryRun,
 		http: &http.Client{
 			Timeout:   timeout,
 			Transport: loggingTransport{next: transport, log: o.Log},
@@ -91,6 +98,10 @@ func (c *Client) do(ctx context.Context, method, path string, body any) (int, []
 		reader = bytes.NewReader(encoded)
 	}
 
+	if c.dryRun != nil && method != http.MethodGet {
+		return c.describeInsteadOfSend(method, path, body)
+	}
+
 	req, err := http.NewRequestWithContext(ctx, method, "https://"+c.addr+path, reader)
 	if err != nil {
 		return 0, nil, err
@@ -114,6 +125,20 @@ func (c *Client) do(ctx context.Context, method, path string, body any) (int, []
 		return resp.StatusCode, nil, fmt.Errorf("read response body: %w", err)
 	}
 	return resp.StatusCode, data, nil
+}
+
+// describeInsteadOfSend prints the request a dry run would have made and
+// fakes an empty successful v2 envelope so callers proceed normally.
+func (c *Client) describeInsteadOfSend(method, path string, body any) (int, []byte, error) {
+	fmt.Fprintf(c.dryRun, "dry run: would send %s https://%s%s\n", method, c.addr, path)
+	if body != nil {
+		pretty, err := json.MarshalIndent(body, "  ", "  ")
+		if err != nil {
+			return 0, nil, err
+		}
+		fmt.Fprintf(c.dryRun, "  %s\n", pretty)
+	}
+	return http.StatusOK, []byte(`{"errors":[],"data":[]}`), nil
 }
 
 // BridgeInfo is what the bridge tells anyone who asks, no key needed.
