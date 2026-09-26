@@ -3,7 +3,7 @@
 Put your Philips Hue lights, rooms and zones on Stream Deck keys with
 [OpenDeck](https://github.com/nekename/OpenDeck).
 
-- **Three actions**: Toggle light, Toggle room, Toggle zone.
+- **Four actions**: Toggle light, Toggle room, Toggle zone, Activate scene.
 - **Pick from a list**: the key's panel shows your lights, rooms or zones,
   read from your bridge.
 - **Keys show the real state**. Switch a light from the Hue app, a wall switch
@@ -49,6 +49,14 @@ The same can be done from a terminal with the `hue` tool, see below:
 4. Press the key. It shows a lit icon when the target is on and a grey one
    when it is off. A room or zone counts as on when any of its lights is on.
 
+**Scenes.** Drag **Activate scene** onto a key, pick the room or zone, then
+one of its scenes. Pressing the key applies the scene; the key stays lit as
+long as that scene is the one active in the room, and goes grey when a light
+in the room is changed by other means. Tick **Play dynamic animation** for
+scenes built from a colour palette, such as the Hue app's "Aurore boréale",
+to have the colours slowly cycle instead of being applied once. Scenes belong
+to rooms and zones in Hue; there are no scenes for a single light.
+
 **Key text.** The panel's *Key text* setting chooses what the plugin writes on
 the key: the target's name, a custom text, or none. Font, size, colour and
 position are OpenDeck's own key settings, in its key panel.
@@ -70,9 +78,11 @@ hue auth status                     list paired bridges and check their keys
 hue auth forget                     remove a bridge's key and settings
 
 hue list lights | rooms | zones     show names, state and brightness (--json for scripts)
+hue list scenes [--in <room>]       scenes by room and zone, the active one marked
 hue on     light|room|zone <name>   also: --brightness 1..100
 hue off    light|room|zone <name>
 hue toggle light|room|zone <name>
+hue scene <room or zone> <scene>    apply a scene; --dynamic animates, --brightness 1..100
 hue watch                           print changes as the bridge reports them
 
 hue plugin status                   where the plugin is installed and logs

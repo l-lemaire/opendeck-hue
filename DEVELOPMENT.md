@@ -78,6 +78,11 @@ without one it is `0.0.0`.
 - **OpenDeck skips symlinked plugin folders**, silently. Install by copying.
 - **OpenDeck passes the directory name as the plugin UUID** and runs the
   plugin with the plugin folder as working directory.
+- **Scenes** are `scene` resources owned by a room or zone (`group`), recalled
+  with `PUT scene/<id> {"recall":{"action":"active"|"dynamic_palette"}}`.
+  `status.active` (`inactive`, `static`, `dynamic_palette`) is kept by the
+  bridge and pushed on the event stream, which is how scene keys follow it.
+  Names repeat across rooms, so a scene is always matched within its group.
 - **Only two v1 API calls remain**: the unauthenticated `/api/0/config` probe
   and `POST /api` for creating a key. Everything else is CLIP v2.
 - **Dry run lives in the HTTP client**, so no code path can write to the
