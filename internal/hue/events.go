@@ -24,6 +24,15 @@ type Change struct {
 	ResourceType string   // "light", "grouped_light", "scene", "button", ...
 	On           *bool    // set when the on/off state was part of the update
 	Brightness   *float64 // set when dimming was part of the update
+	// SceneStatus is set for "scene" updates that carry status.active:
+	// "inactive", "static" or "dynamic_palette".
+	SceneStatus string
+}
+
+// SceneActive reports whether a scene change says the scene is now active.
+// Only meaningful when SceneStatus is set.
+func (ch Change) SceneActive() bool {
+	return ch.SceneStatus != "" && ch.SceneStatus != "inactive"
 }
 
 // EventHandler receives what happens on the stream. All fields optional.
@@ -100,6 +109,9 @@ func parseChanges(data []byte, c *Client) []Change {
 			Dimming *struct {
 				Brightness float64 `json:"brightness"`
 			} `json:"dimming"`
+			Status *struct {
+				Active string `json:"active"`
+			} `json:"status"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(data, &batch); err != nil {
@@ -120,6 +132,9 @@ func parseChanges(data []byte, c *Client) []Change {
 			if r.Dimming != nil {
 				b := r.Dimming.Brightness
 				ch.Brightness = &b
+			}
+			if r.Status != nil && r.Type == "scene" {
+				ch.SceneStatus = r.Status.Active
 			}
 			changes = append(changes, ch)
 		}

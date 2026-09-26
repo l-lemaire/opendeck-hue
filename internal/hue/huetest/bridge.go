@@ -54,6 +54,7 @@ type Bridge struct {
 	mu      sync.Mutex
 	lights  map[string]map[string]any
 	grouped map[string]map[string]any
+	scenes  map[string]map[string]any
 	rooms   []map[string]any
 	zones   []map[string]any
 	puts    []string // "type/id" of every PUT, in order, for assertions
@@ -96,6 +97,36 @@ func (fb *Bridge) emitUpdate(rtype string, res map[string]any) {
 		select {
 		case ch <- string(payload):
 		default:
+		}
+	}
+}
+
+// emitScene emits a scene status update. Called with mu held.
+func (fb *Bridge) emitScene(res map[string]any) {
+	event := []map[string]any{{
+		"creationtime": time.Now().UTC().Format(time.RFC3339),
+		"id":           "evt-" + res["id"].(string),
+		"type":         "update",
+		"data":         []any{map[string]any{"id": res["id"], "type": "scene", "status": res["status"]}},
+	}}
+	payload, _ := json.Marshal(event)
+	for ch := range fb.subscribers {
+		select {
+		case ch <- string(payload):
+		default:
+		}
+	}
+}
+
+// DeactivateScenes marks every scene of a group inactive, as the bridge
+// does when a light in the group is changed by hand, and emits the events.
+func (fb *Bridge) DeactivateScenes(groupID string) {
+	fb.mu.Lock()
+	defer fb.mu.Unlock()
+	for _, sc := range fb.scenes {
+		if sc["group"].(map[string]any)["rid"] == groupID && sc["status"].(map[string]any)["active"] != "inactive" {
+			sc["status"] = map[string]any{"active": "inactive"}
+			fb.emitScene(sc)
 		}
 	}
 }
@@ -174,6 +205,9 @@ const (
 	GroupedOffice  = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
 	RoomKitchen    = "cccccccc-cccc-cccc-cccc-cccccccccccc"
 	ZoneOffice     = "dddddddd-dddd-dddd-dddd-dddddddddddd"
+	SceneRelax     = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeee1" // "Relax" in the kitchen
+	SceneBright    = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeee2" // "Bright" in the kitchen
+	SceneFocus     = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeee3" // "Focus" in the office zone
 )
 
 func (fb *Bridge) seedResources() {
@@ -193,6 +227,19 @@ func (fb *Bridge) seedResources() {
 			"on": map[string]any{"on": true}, "dimming": map[string]any{"brightness": 80.0}},
 		GroupedOffice: {"id": GroupedOffice, "type": "grouped_light", "owner": map[string]any{"rid": ZoneOffice, "rtype": "zone"},
 			"on": map[string]any{"on": false}, "dimming": map[string]any{"brightness": 50.0}},
+	}
+	scene := func(id, name, groupID, groupType string) map[string]any {
+		return map[string]any{
+			"id": id, "type": "scene", "metadata": map[string]any{"name": name},
+			"group":  map[string]any{"rid": groupID, "rtype": groupType},
+			"status": map[string]any{"active": "inactive"}, "auto_dynamic": false,
+			"actions": []any{},
+		}
+	}
+	fb.scenes = map[string]map[string]any{
+		SceneRelax:  scene(SceneRelax, "Relax", RoomKitchen, "room"),
+		SceneBright: scene(SceneBright, "Bright", RoomKitchen, "room"),
+		SceneFocus:  scene(SceneFocus, "Focus", ZoneOffice, "zone"),
 	}
 	fb.rooms = []map[string]any{{
 		"id": RoomKitchen, "type": "room", "metadata": map[string]any{"name": "Kitchen"},
@@ -233,6 +280,8 @@ func (fb *Bridge) v2Handler(w http.ResponseWriter, r *http.Request) {
 		byID = fb.lights
 	case "grouped_light":
 		byID = fb.grouped
+	case "scene":
+		byID = fb.scenes
 	case "room":
 		list = fb.rooms
 	case "zone":
@@ -265,6 +314,30 @@ func (fb *Bridge) v2Handler(w http.ResponseWriter, r *http.Request) {
 		var patch map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&patch); err != nil {
 			write(http.StatusBadRequest, []any{}, "invalid json")
+			return
+		}
+		if rtype == "scene" {
+			recall, _ := patch["recall"].(map[string]any)
+			action, _ := recall["action"].(string)
+			if action != "active" && action != "dynamic_palette" {
+				write(http.StatusBadRequest, []any{}, "invalid recall action")
+				return
+			}
+			status := "static"
+			if action == "dynamic_palette" {
+				status = "dynamic_palette"
+			}
+			group := res["group"].(map[string]any)["rid"]
+			for _, other := range fb.scenes {
+				if other["group"].(map[string]any)["rid"] == group && other["id"] != id && other["status"].(map[string]any)["active"] != "inactive" {
+					other["status"] = map[string]any{"active": "inactive"}
+					fb.emitScene(other)
+				}
+			}
+			res["status"] = map[string]any{"active": status}
+			fb.puts = append(fb.puts, "scene/"+id)
+			fb.emitScene(res)
+			write(http.StatusOK, []map[string]string{{"rid": id, "rtype": "scene"}})
 			return
 		}
 		if _, hasDimming := patch["dimming"]; hasDimming && res["dimming"] == nil {

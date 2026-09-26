@@ -92,6 +92,8 @@ func run(args []string) error {
 		return a.plugin(commandArgs)
 	case "on", "off", "toggle":
 		return a.power(command, commandArgs)
+	case "scene":
+		return a.scene(commandArgs)
 	case "version":
 		if len(commandArgs) > 0 {
 			return fmt.Errorf("version: unexpected argument %q", commandArgs[0])
@@ -131,10 +133,11 @@ commands:
   auth          pair with a bridge (press its link button) and store the key
   auth status   list paired bridges and check their keys
   auth forget   delete a bridge's key and configuration
-  list lights|rooms|zones [--json]
+  list lights|rooms|zones|scenes [--json]   (scenes: --in <room or zone>)
   on     light|room|zone [--brightness N] [--dry-run] <name or id>
   off    light|room|zone [--dry-run] <name or id>
   toggle light|room|zone [--dry-run] <name or id>
+  scene  <room or zone> <scene> [--dynamic] [--brightness N] [--dry-run]
   watch         print changes reported by the bridge until Ctrl-C
   plugin status        show where the OpenDeck plugin is installed and logs
   plugin debug on|off  toggle full debug output in the plugin log

@@ -37,8 +37,17 @@ func (a *app) watch(args []string) error {
 	if err != nil {
 		return err
 	}
+	groupName := map[string]string{}
 	for _, g := range groups {
 		names[g.GroupedLightID] = fmt.Sprintf("%s %q", g.Kind, g.Name)
+		groupName[g.ID] = g.Name
+	}
+	scenes, err := client.Scenes(a.ctx)
+	if err != nil {
+		return err
+	}
+	for _, s := range scenes {
+		names[s.ID] = fmt.Sprintf("scene %q in %q", s.Name(), groupName[s.Group.RID])
 	}
 
 	fmt.Fprintf(os.Stderr, "Watching bridge %s; Ctrl-C to stop.\n", bridge.ID)
@@ -53,7 +62,7 @@ func (a *app) watch(args []string) error {
 				fmt.Println(string(out))
 				return
 			}
-			if ch.On == nil && ch.Brightness == nil {
+			if ch.On == nil && ch.Brightness == nil && ch.SceneStatus == "" {
 				return // colour, effects and other fields we do not model
 			}
 			name, ok := names[ch.ResourceID]
@@ -66,6 +75,9 @@ func (a *app) watch(args []string) error {
 			}
 			if ch.Brightness != nil {
 				line += fmt.Sprintf(" %d%%", int(*ch.Brightness+0.5))
+			}
+			if ch.SceneStatus != "" {
+				line += " " + ch.SceneStatus
 			}
 			fmt.Println(line)
 		},

@@ -47,7 +47,10 @@ func parseKind(word string) (kind, error) {
 // list implements `hue list <kind>`.
 func (a *app) list(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("list: what to list is required (lights, rooms or zones)")
+		return fmt.Errorf("list: what to list is required (lights, rooms, zones or scenes)")
+	}
+	if args[0] == "scene" || args[0] == "scenes" {
+		return a.listScenes(args[1:])
 	}
 	k, err := parseKind(args[0])
 	if err != nil {
