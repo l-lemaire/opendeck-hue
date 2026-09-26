@@ -49,7 +49,11 @@ func (p *plugin) onKeyDown(ctx context.Context, ev openaction.Event, raw json.Ra
 			p.conn.ShowAlert(ctx, ev.Context)
 			return
 		}
-		p.info.Printf("toggled %s %q -> %s", s.Kind, s.Name, onOff(nowOn))
+		if s.Kind == "scene" {
+			p.info.Printf("recalled scene %q in %q", s.Name, s.GroupName)
+		} else {
+			p.info.Printf("toggled %s %q -> %s", s.Kind, s.Name, onOff(nowOn))
+		}
 		if err := p.conn.SetState(ctx, ev.Context, stateIndex(nowOn)); err != nil {
 			p.info.Printf("setState for %s failed: %v", ev.Context, err)
 		}
@@ -70,6 +74,12 @@ func (p *plugin) toggle(ctx context.Context, action string, s Settings) (bool, e
 	}
 	if kind == "light" {
 		return client.ToggleLight(ctx, s.Target)
+	}
+	if kind == "scene" {
+		// A scene key is not a toggle: pressing it recalls the scene, and
+		// the key lights up because the scene is now active.
+		err := client.RecallScene(ctx, s.Target, hue.RecallOptions{Dynamic: s.Dynamic})
+		return err == nil, err
 	}
 	groupedID, err := p.groupedLightID(ctx, client, kind, s)
 	if err != nil {
@@ -143,6 +153,13 @@ func (p *plugin) currentState(ctx context.Context, action string, s Settings) (b
 			return false, err
 		}
 		return light.IsOn(), nil
+	}
+	if kind == "scene" {
+		sc, err := client.Scene(ctx, s.Target)
+		if err != nil {
+			return false, err
+		}
+		return sc.IsActive(), nil
 	}
 	groupedID, err := p.groupedLightID(ctx, client, kind, s)
 	if err != nil {

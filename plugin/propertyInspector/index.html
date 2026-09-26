@@ -68,11 +68,19 @@
 			<label for="bridge">Bridge</label>
 			<select id="bridge"></select>
 		</div>
+		<div class="row" id="group-row" hidden>
+			<label for="scene-group">Room or zone</label>
+			<select id="scene-group"></select>
+		</div>
 		<div class="row">
 			<label for="target" id="target-label">Target</label>
 			<select id="target" disabled>
 				<option value="">Loading…</option>
 			</select>
+		</div>
+		<div class="row" id="dynamic-row" hidden>
+			<label></label>
+			<label class="check"><input id="dynamic" type="checkbox" /> Play dynamic animation</label>
 		</div>
 		<div class="row">
 			<label for="label">Key text</label>

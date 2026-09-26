@@ -75,7 +75,7 @@ func (p *plugin) watchBridge(ctx context.Context, bridgeKey string) {
 			p.refreshAll(ctx, bridgeKey)
 		},
 		OnChange: func(ch hue.Change) {
-			if ch.On != nil {
+			if ch.On != nil || ch.SceneStatus != "" {
 				p.applyChange(ctx, ch)
 			}
 		},
@@ -87,12 +87,30 @@ func (p *plugin) watchBridge(ctx context.Context, bridgeKey string) {
 
 // applyChange updates every button that displays the changed resource.
 func (p *plugin) applyChange(ctx context.Context, ch hue.Change) {
+	// What the affected buttons should show.
+	var on bool
+	switch {
+	case ch.ResourceType == "scene" && ch.SceneStatus != "":
+		on = ch.SceneActive()
+	case ch.On != nil:
+		on = *ch.On
+	default:
+		return
+	}
+
 	p.mu.Lock()
 	var affected []string
 	for buttonContext, b := range p.buttons {
 		s := b.settings
-		matches := (ch.ResourceType == "light" && s.Kind != "room" && s.Kind != "zone" && s.Target == ch.ResourceID) ||
-			(ch.ResourceType == "grouped_light" && s.GroupedLight == ch.ResourceID)
+		var matches bool
+		switch ch.ResourceType {
+		case "light":
+			matches = s.Kind == "light" && s.Target == ch.ResourceID
+		case "grouped_light":
+			matches = s.GroupedLight == ch.ResourceID
+		case "scene":
+			matches = s.Kind == "scene" && s.Target == ch.ResourceID
+		}
 		if matches {
 			affected = append(affected, buttonContext)
 		}
@@ -100,8 +118,8 @@ func (p *plugin) applyChange(ctx context.Context, ch hue.Change) {
 	p.mu.Unlock()
 
 	for _, buttonContext := range affected {
-		p.info.Printf("%s %s is now %s; updating button %s", ch.ResourceType, ch.ResourceID, onOff(*ch.On), buttonContext)
-		if err := p.conn.SetState(ctx, buttonContext, stateIndex(*ch.On)); err != nil {
+		p.info.Printf("%s %s is now %s; updating button %s", ch.ResourceType, ch.ResourceID, onOff(on), buttonContext)
+		if err := p.conn.SetState(ctx, buttonContext, stateIndex(on)); err != nil {
 			p.info.Printf("setState for %s failed: %v", buttonContext, err)
 		}
 	}

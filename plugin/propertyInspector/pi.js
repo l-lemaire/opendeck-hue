@@ -12,6 +12,7 @@
 let websocket = null;
 let actionInfo = null; // {action, context, payload:{settings,...}}
 let settings = {};     // the button's current settings
+let lastTargets = null; // the last "targets" payload, re-filtered when the group changes
 
 const $ = (id) => document.getElementById(id);
 
@@ -38,6 +39,11 @@ function connectOpenActionSocket(port, uuid, registerEvent, info, inActionInfo) 
 
 	$("target-label").textContent = kindLabel();
 	$("label").options[0].textContent = kindLabel() + " name";
+	$("group-row").hidden = !isScene();
+	$("dynamic-row").hidden = !isScene();
+	$("scene-group").addEventListener("change", () => renderTargets());
+	$("dynamic").addEventListener("change", onDynamicChanged);
+	$("dynamic").checked = !!settings.dynamic;
 	$("refresh").addEventListener("click", requestTargets);
 	$("target").addEventListener("change", onTargetChosen);
 	$("label").addEventListener("change", onLabelChanged);
@@ -50,11 +56,15 @@ function connectOpenActionSocket(port, uuid, registerEvent, info, inActionInfo) 
 }
 const connectElgatoStreamDeckSocket = connectOpenActionSocket;
 
-// kindLabel derives "Light", "Room" or "Zone" from the action UUID.
+// kindLabel derives "Light", "Room", "Zone" or "Scene" from the action UUID.
 function kindLabel() {
-	const name = (actionInfo.action || "").split(".").pop(); // "toggle-light"
+	const name = (actionInfo.action || "").split(".").pop(); // "toggle-light" or "scene"
 	const kind = name.replace("toggle-", "");
 	return kind ? kind[0].toUpperCase() + kind.slice(1) : "Target";
+}
+
+function isScene() {
+	return kindLabel() === "Scene";
 }
 
 function sendToPlugin(payload) {
@@ -105,23 +115,52 @@ function onPluginMessage(payload) {
 	}
 	$("bridge-row").hidden = payload.bridges.length < 2;
 
-	// Target selector.
+	lastTargets = payload;
+	if (isScene()) {
+		// Room or zone selector, filled from the groups the plugin sent; the
+		// button's stored group, else the first, is selected.
+		const gs = $("scene-group");
+		gs.innerHTML = "";
+		for (const g of payload.groups || []) {
+			const opt = document.createElement("option");
+			opt.value = g.id;
+			opt.textContent = g.name + "  (" + g.kind + ")";
+			opt.selected = g.id === settings.group;
+			gs.appendChild(opt);
+		}
+		if (gs.selectedIndex < 0 && gs.options.length) gs.selectedIndex = 0;
+	}
+	renderTargets();
+}
+
+// renderTargets fills the target dropdown from lastTargets, filtered to the
+// selected group for scenes.
+function renderTargets() {
+	const payload = lastTargets;
+	if (!payload) return;
+	let items = payload.items;
+	if (isScene()) {
+		const group = $("scene-group").value;
+		items = items.filter((it) => it.group === group);
+	}
 	const select = $("target");
 	select.innerHTML = "";
 	const placeholder = document.createElement("option");
 	placeholder.value = "";
 	placeholder.textContent = "— choose a " + payload.kind + " —";
 	select.appendChild(placeholder);
-	for (const item of payload.items) {
+	for (const item of items) {
 		const opt = document.createElement("option");
 		opt.value = item.id;
-		opt.textContent = item.name + (item.on ? "  (on)" : "  (off)");
+		const state = isScene() ? (item.on ? "  (active)" : "") : (item.on ? "  (on)" : "  (off)");
+		opt.textContent = item.name + state;
 		opt.dataset.groupedLight = item.grouped_light || "";
+		opt.dataset.group = item.group || "";
 		opt.selected = item.id === settings.target;
 		select.appendChild(opt);
 	}
 	select.disabled = false;
-	setStatus(payload.items.length + " " + payload.kind + (payload.items.length === 1 ? "" : "s") + " found", "ok");
+	setStatus(items.length + " " + payload.kind + (items.length === 1 ? "" : "s") + " found", "ok");
 }
 
 function onTargetChosen() {
@@ -132,7 +171,13 @@ function onTargetChosen() {
 	settings.kind = kindLabel().toLowerCase();
 	settings.target = opt.value;
 	settings.grouped_light = opt.dataset.groupedLight || undefined;
-	settings.name = opt.textContent.replace(/\s+\((on|off)\)$/, "");
+	settings.name = opt.textContent.replace(/\s+\((on|off|active)\)$/, "");
+	if (isScene()) {
+		const gs = $("scene-group");
+		settings.group = gs.value;
+		settings.group_name = (gs.options[gs.selectedIndex] || {}).textContent.replace(/\s+\((room|zone)\)$/, "");
+		settings.dynamic = $("dynamic").checked || undefined;
+	}
 	saveSettings("Saved: " + settings.name);
 }
 
@@ -151,6 +196,12 @@ function onLabelChanged() {
 	if (settings.label !== "custom") delete settings.custom_label;
 	if (!settings.target) return; // nothing to show yet; saved with the target later
 	saveSettings("Saved");
+}
+
+function onDynamicChanged() {
+	settings.dynamic = $("dynamic").checked || undefined;
+	if (!settings.target) return;
+	saveSettings($("dynamic").checked ? "Saved: dynamic animation on" : "Saved: static recall");
 }
 
 function saveSettings(message) {

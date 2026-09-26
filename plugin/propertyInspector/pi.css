@@ -120,6 +120,17 @@ button:focus-visible {
 }
 button svg { width: 14px; height: 14px; }
 
+label.check {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	text-align: left;
+	font-weight: 500;
+	color: var(--text);
+	cursor: pointer;
+}
+label.check input { accent-color: var(--accent); margin: 0; }
+
 /* Status line: a coloured dot and a short message. */
 .status {
 	display: flex;

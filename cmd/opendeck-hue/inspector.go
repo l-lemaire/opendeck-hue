@@ -55,8 +55,16 @@ type pairingReply struct {
 type targetItem struct {
 	ID           string `json:"id"`
 	Name         string `json:"name"`
-	On           bool   `json:"on"`
+	On           bool   `json:"on"` // for scenes: currently active
 	GroupedLight string `json:"grouped_light,omitempty"`
+	Group        string `json:"group,omitempty"` // for scenes: the room/zone id
+}
+
+// groupItem is a room or zone offered to filter scenes by.
+type groupItem struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Kind string `json:"kind"`
 }
 
 type bridgeItem struct {
@@ -71,6 +79,7 @@ type targetsReply struct {
 	Bridge  string       `json:"bridge"`
 	Bridges []bridgeItem `json:"bridges"`
 	Items   []targetItem `json:"items"`
+	Groups  []groupItem  `json:"groups,omitempty"` // scenes only
 }
 
 type errorReply struct {
@@ -142,6 +151,23 @@ func (p *plugin) listTargets(ctx context.Context, action, bridgeID string) (targ
 		}
 		for _, l := range lights {
 			reply.Items = append(reply.Items, targetItem{ID: l.ID, Name: l.Name(), On: l.IsOn()})
+		}
+	case "scene":
+		// Scenes come with the rooms and zones they belong to, so the panel
+		// can offer a group first and then the scenes of that group.
+		groups, err := client.Groups(ctx)
+		if err != nil {
+			return targetsReply{}, err
+		}
+		for _, g := range groups {
+			reply.Groups = append(reply.Groups, groupItem{ID: g.ID, Name: g.Name, Kind: g.Kind})
+		}
+		scenes, err := client.Scenes(ctx)
+		if err != nil {
+			return targetsReply{}, err
+		}
+		for _, sc := range scenes {
+			reply.Items = append(reply.Items, targetItem{ID: sc.ID, Name: sc.Name(), On: sc.IsActive(), Group: sc.Group.RID})
 		}
 	default:
 		var groups []hue.Group

@@ -23,6 +23,20 @@
 	],
 	"Actions": [
 		{
+			"UUID": "com.github.l-lemaire.hue.scene",
+			"Name": "Activate scene",
+			"Tooltip": "Apply a Hue scene to its room or zone",
+			"Icon": "icons/scene",
+			"Controllers": ["Keypad"],
+			"SupportedInMultiActions": true,
+			"DisableAutomaticStates": true,
+			"PropertyInspectorPath": "propertyInspector/index.html",
+			"States": [
+				{ "Image": "icons/scene-off", "Name": "Inactive", "TitleAlignment": "bottom", "FontSize": "9" },
+				{ "Image": "icons/scene-on", "Name": "Active", "TitleAlignment": "bottom", "FontSize": "9" }
+			]
+		},
+		{
 			"UUID": "com.github.l-lemaire.hue.toggle-light",
 			"Name": "Toggle light",
 			"Tooltip": "Switch one Hue light on or off",

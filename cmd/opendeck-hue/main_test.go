@@ -497,3 +497,76 @@ func TestDiscoverFromInspector(t *testing.T) {
 		t.Errorf("payload = %v", payload)
 	}
 }
+
+func TestInspectorListsScenesWithGroups(t *testing.T) {
+	host, sent, _ := startPlugin(t)
+	push(t, host, map[string]any{
+		"event": "sendToPlugin", "action": actionPrefix + "scene", "context": "ctx-s1",
+		"payload": map[string]any{"event": "listTargets"},
+	})
+	payload := expectEvent(t, sent, "sendToPropertyInspector")["payload"].(map[string]any)
+	if payload["event"] != "targets" || payload["kind"] != "scene" {
+		t.Fatalf("payload = %v", payload)
+	}
+	groups := payload["groups"].([]any)
+	items := payload["items"].([]any)
+	if len(groups) != 2 || len(items) != 3 {
+		t.Fatalf("groups=%d items=%d", len(groups), len(items))
+	}
+	var focus map[string]any
+	for _, it := range items {
+		if m := it.(map[string]any); m["name"] == "Focus" {
+			focus = m
+		}
+	}
+	if focus == nil || focus["group"] != huetest.ZoneOffice || focus["on"] != false {
+		t.Errorf("focus item = %v", focus)
+	}
+}
+
+func sceneSettings(dynamic bool) map[string]any {
+	return map[string]any{"kind": "scene", "target": huetest.SceneRelax, "name": "Relax",
+		"group": huetest.RoomKitchen, "group_name": "Kitchen", "dynamic": dynamic}
+}
+
+func TestSceneKeyRecallsAndFollowsStatus(t *testing.T) {
+	host, sent, fb := startPlugin(t)
+	// The key appears: title and initial state (inactive).
+	push(t, host, map[string]any{
+		"event": "willAppear", "action": actionPrefix + "scene", "context": "ctx-s2",
+		"payload": map[string]any{"settings": sceneSettings(false), "controller": "Keypad"},
+	})
+	if m := expectEvent(t, sent, "setTitle"); m["payload"].(map[string]any)["title"] != "Relax" {
+		t.Errorf("title = %v", m)
+	}
+	waitForState(t, sent, "ctx-s2", stateOff)
+
+	// Press: the scene is recalled statically and the key lights up.
+	push(t, host, map[string]any{
+		"event": "keyDown", "action": actionPrefix + "scene", "context": "ctx-s2",
+		"payload": map[string]any{"settings": sceneSettings(false), "state": 0},
+	})
+	waitForState(t, sent, "ctx-s2", stateOn)
+	if puts := fb.Puts(); len(puts) != 1 || puts[0] != "scene/"+huetest.SceneRelax {
+		t.Errorf("bridge PUTs = %v", puts)
+	}
+
+	// Someone changes a kitchen light by hand: the bridge marks the scene
+	// inactive and the key goes grey.
+	fb.DeactivateScenes(huetest.RoomKitchen)
+	waitForState(t, sent, "ctx-s2", stateOff)
+}
+
+func TestSceneKeyDynamic(t *testing.T) {
+	host, sent, fb := startPlugin(t)
+	push(t, host, map[string]any{
+		"event": "keyDown", "action": actionPrefix + "scene", "context": "ctx-s3",
+		"payload": map[string]any{"settings": sceneSettings(true), "state": 0},
+	})
+	waitForState(t, sent, "ctx-s3", stateOn)
+	c := hue.NewClient(hue.ClientOptions{Addr: fb.Addr(), ID: fb.ID, Fingerprint: fb.Fingerprint, AppKey: fb.AppKey})
+	sc, err := c.Scene(context.Background(), huetest.SceneRelax)
+	if err != nil || sc.Status.Active != "dynamic_palette" {
+		t.Errorf("scene status = %q, %v; want dynamic_palette", sc.Status.Active, err)
+	}
+}

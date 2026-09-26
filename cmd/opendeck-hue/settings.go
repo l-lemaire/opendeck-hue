@@ -15,11 +15,18 @@ const actionPrefix = "com.github.l-lemaire.hue."
 type Settings struct {
 	// Bridge is the bridge id; empty means the default bridge.
 	Bridge string `json:"bridge,omitempty"`
-	// Kind is "light", "room" or "zone". Redundant with the action UUID but
-	// handy when reading a profile by hand.
+	// Kind is "light", "room", "zone" or "scene". Redundant with the action
+	// UUID but handy when reading a profile by hand.
 	Kind string `json:"kind,omitempty"`
-	// Target is the v2 id of the light, room or zone.
+	// Target is the v2 id of the light, room, zone or scene.
 	Target string `json:"target,omitempty"`
+	// Group is the room or zone a scene belongs to (scene keys only), and
+	// GroupName its name for display.
+	Group     string `json:"group,omitempty"`
+	GroupName string `json:"group_name,omitempty"`
+	// Dynamic makes a scene key start the colour animation instead of a
+	// static recall.
+	Dynamic bool `json:"dynamic,omitempty"`
 	// GroupedLight is the grouped_light id for rooms and zones, so a key
 	// press needs one request less. Empty for lights.
 	GroupedLight string `json:"grouped_light,omitempty"`
@@ -75,6 +82,8 @@ func kindOf(actionUUID string) (string, error) {
 		return "room", nil
 	case "toggle-zone":
 		return "zone", nil
+	case "scene":
+		return "scene", nil
 	default:
 		return "", fmt.Errorf("unknown action %q", actionUUID)
 	}
